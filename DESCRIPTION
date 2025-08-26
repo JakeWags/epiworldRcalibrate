@@ -1,12 +1,22 @@
 Package: epiworldRcalibrate
 Title: Calibration with LSTM models
 Version: 0.0.1
-Authors@R: 
-    person("Sima", "Najafzadehkhoei", , "sima.njf@utah.edu", role = c("aut", "cre"),
-           comment = c(ORCID = "YOUR-ORCID-ID"))
+Authors@R: c(
+  person(
+    "George", "Vega Yon", role=c("aut","cre"), email="g.vegayon@gmail.com",
+    comment = c(ORCID = "0000-0002-3171-0844")
+    ),
+    person(
+    "Bernardo", "Modenesi", role=c("aut","cre"), email="bmodenesi@gmail.com",
+    comment = c(ORCID = "--")
+    ),
+  person(
+    "Sima", "Najafzadehkhoei", role=c("aut"), email="sima.njf@utah.edu",
+    comment = c(ORCID = "0009-0002-6253-2910")
+  ))
 Description: Provides functions for calibration using Long-short term memory (LSTM).
     The package includes the pre-treined model which can be used directly on your data to do the calibration.
-License: MIT + file LICENSE
+License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
@@ -24,5 +34,6 @@ Imports:
     dplyr,
     ggplot2 (>= 3.4.0),
     stats,
-    reticulate
-VignetteBuilder: knitr
+    reticulate,
+    quarto
+VignetteBuilder: quarto
