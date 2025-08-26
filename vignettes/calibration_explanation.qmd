@@ -1,19 +1,18 @@
 ---
-title: "LSTM-Based Calibration for a Single SIR Parameter Set"
-author: "Sima"
-output: rmarkdown::html_vignette
-vignette:
-  %\VignetteIndexEntry{LSTM-Based Calibration for a Single SIR Parameter Set}
-  %\VignetteEngine{knitr::rmarkdown}
+title: "Introduction to a Lstm-based calibration"
+author: "Sima Najafzadehkhoei"
+date: today
+format: html
+vignette: >
+  %\VignetteIndexEntry{Introduction to a Lstm-based calibration}
+  %\VignetteEngine{quarto::format}
   %\VignetteEncoding{UTF-8}
 ---
-
-
 
 ## Load Required Libraries
 We begin by loading the necessary packages. These include the epiworldR suite for simulation, the custom epiworldRcalibrate package for BiLSTM-based parameter inference, and plotting tools.
 
-```{r}
+```{r, results='hide'}
 library(tidyverse)
 library(epiworldR)
 library(epiworldRcalibrate)
@@ -134,7 +133,7 @@ create_sir_plot <- function(data, state_name, title) {
   ggplot(plot_data, aes(x = date, color = param_type)) +
     geom_ribbon(data = plot_data %>% filter(param_type == "lstm"),
                 aes(ymin = ci_lower, ymax = ci_upper, fill = param_type), alpha = 0.2, color = NA) +
-    geom_line(aes(y = mean_count), size = 1.2) +
+    geom_line(aes(y = mean_count), linewidth = 1.2) +
     scale_color_manual(values = method_colors) +
     scale_fill_manual(values = method_colors) +
     labs(title = title, x = "Day", y = "Count (95% CI)", color = "Method", fill = "Method") +
@@ -154,8 +153,6 @@ p_recovered <- create_sir_plot(all_simulation_results, "Recovered", "Recovered O
 
 ## Calculate Bias
 We compare the inferred parameters to their ground truth values and summarize differences in epidemic trajectories.
-
-
 
 ### 📊 Parameter Bias Table (Static Parameter Comparison)
 
@@ -185,8 +182,6 @@ print(param_bias)
 * A **Bias** close to 0 means the LSTM prediction is very close to the true value.
 * A **Relative Bias** close to 0% indicates high accuracy.
 * Negative bias means underestimation, and positive means overestimation.
-
----
 
 ### 📈 Time Series Bias (Infected Trajectory Comparison)
 
@@ -222,8 +217,6 @@ bias_summary <- trajectory_comparison %>%
 print(bias_summary)
 ```
 
-
-
 ## Save Results
 All analysis results, including parameter estimates, simulation outputs, and bias summaries are saved for future use.
 
@@ -237,7 +230,7 @@ results_list <- list(
   trajectory_bias = bias_summary
 )
 
-saveRDS(results_list, "single_param_comparison_results.rds")
+head(results_list,5)
 ```
 
 ## Conclusion
