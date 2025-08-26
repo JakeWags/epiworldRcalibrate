@@ -36,18 +36,6 @@ reference:
     desc: "Functions to predict SIR parameters from incidence data"
     contents:
       - predict_sir_bilstm
-  - title: "Utility Functions"
-    desc: "Helper functions for data processing and validation"
-    contents:
-      - validate_incidence_data
-      - preprocess_timeseries
-      - plot_prediction_comparison
-  - title: "Model Diagnostics"
-    desc: "Functions for evaluating model performance"
-    contents:
-      - calculate_prediction_bias
-      - model_performance_metrics
-      - cross_validation_analysis
 
 footer:
   structure:
