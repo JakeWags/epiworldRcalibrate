@@ -9,7 +9,13 @@
 Provides functions for calibration using Long-short term memory (LSTM). The package includes the pre-treined model which can be used directly on your data to do the calibration.
 }
 \author{
-\strong{Maintainer}: Sima Najafzadehkhoei \email{sima.njf@utah.edu} (\href{https://orcid.org/YOUR-ORCID-ID}{ORCID})
+\strong{Maintainer}: George Vega Yon \email{g.vegayon@gmail.com} (\href{https://orcid.org/0000-0002-3171-0844}{ORCID})
+
+Authors:
+\itemize{
+  \item Bernardo Modenesi \email{bmodenesi@gmail.com}
+  \item Sima Najafzadehkhoei \email{sima.njf@utah.edu} (\href{https://orcid.org/0009-0002-6253-2910}{ORCID})
+}
 
 }
 \keyword{internal}

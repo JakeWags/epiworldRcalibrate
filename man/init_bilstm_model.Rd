@@ -2,13 +2,13 @@
 % Please edit documentation in R/calibrate_sir_bilstm.R
 \name{init_bilstm_model}
 \alias{init_bilstm_model}
-\title{Initialize BiLSTM Model for SIR Calibration}
+\title{Initialize BiLSTM Model for SIR Parameter Estimation}
 \usage{
 init_bilstm_model(model_dir = NULL, force_reload = FALSE)
 }
 \arguments{
 \item{model_dir}{Character. Path to directory containing model files.
-If NULL, uses default "~/epiworldRcalibrate/epiworldRcalibrate/inst/models/LSTM_model"}
+If NULL, uses default model directory}
 
 \item{force_reload}{Logical. Force reload even if model already loaded (default: FALSE)}
 }
@@ -16,29 +16,25 @@ If NULL, uses default "~/epiworldRcalibrate/epiworldRcalibrate/inst/models/LSTM_
 Logical. TRUE if model loaded successfully
 }
 \description{
-Initialize BiLSTM Model for SIR Calibration
+Initialize BiLSTM Model for SIR Parameter Estimation
 }
 \details{
-This function loads the BiLSTM model and scalers into memory once. Call this before
-using \code{\link{predict_sir_bilstm}} for optimal performance. The model stays loaded until
-R session ends or \code{\link{cleanup_bilstm_model}} is called.
+This function loads the pre-trained BiLSTM model and scalers into memory.
+Must be called before using \code{\link{estimate_sir_parameters}}.
 
 Required files in \code{model_dir}:
 \itemize{
-\item model4_bilstm.pt - PyTorch model weights
-\item scaler_additional.pkl - Scaler for additional inputs
-\item scaler_targets.pkl - Scaler for target outputs
-\item scaler_incidence.pkl - Scaler for incidence data
+\item model4_bilstm_relchange_no_eps.pt - PyTorch model weights
+\item scaler_additional_no_eps.pkl - Scaler for population size and recovery rate
+\item scaler_targets_no_eps.pkl - Scaler for transmission rate, contact rate, and R0
 }
 }
 \examples{
 \dontrun{
-# Initialize model (do this once)
+# Initialize model (do this once per R session)
 init_bilstm_model()
 
-# Now make fast predictions
-for(i in 1:100) {
-  params <- predict_sir_bilstm(incidence_data, n = 5000, recov = 0.1)
-}
+# Or specify custom model directory
+init_bilstm_model("/path/to/your/model/files")
 }
 }
