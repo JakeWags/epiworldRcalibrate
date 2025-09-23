@@ -1,99 +1,183 @@
-Here is a cleaned-up and properly formatted version of your `README.md` designed for `github_document` rendering:
-
-````markdown
 ---
 output: github_document
 ---
 
 # epiworldRcalibrate
 
-> BiLSTM-based parameter calibration tools for SIR models built on the epiworldR framework.
+> BiLSTM-based parameter calibration tools for SIR models built on the **epiworldR** framework.
 
 ---
 
 ## 📦 Overview
 
-`epiworldRcalibrate` provides fast, deep-learning-based calibration of SIR model parameters using a BiLSTM model implemented in **PyTorch** and accessed from R via the `reticulate` package.  
-It enables users to load a trained neural network once and make rapid predictions of epidemiological parameters such as transmission rate, contact rate, and basic reproduction number (`R0`) — especially useful in large-scale or repetitive simulations.
+`epiworldRcalibrate` provides fast, deep-learning-based calibration of SIR model parameters using a bidirectional LSTM (BiLSTM) implemented in **PyTorch** and accessed from R via **reticulate**.  
+Given 61 days of incidence counts and basic context (population size, recovery rate), the model predicts:
+
+- `ptran` — transmission probability  
+- `crate` — contact rate  
+- `R0` — basic reproduction number
+
+This is especially useful for ABC workflows, simulation studies, and large-scale parameter sweeps.
 
 ---
 
-## 🔧 Features
+## 🔧 Key Features
 
-- ✅ Persistent BiLSTM model loading via `reticulate` and PyTorch  
-- ✅ Predicts:
-  - `ptran` — transmission probability  
-  - `crate` — contact rate  
-  - `R0` — basic reproduction number  
-- ✅ One-time model initialization (keeps model in memory)  
-- ✅ Fast predictions for repeated simulation workflows  
-- ✅ Cleanup function to release resources  
-- ✅ Well-suited for ABC calibration and forward simulation studies  
+- 🔌 One-step estimation with `quick_estimate_sir()`  
+- ⚙️ Manual control via `init_bilstm_model()` + `estimate_sir_parameters()`  
+- 🧪 Transparent preprocessing demo with `show_preprocessing()`  
+- 📈 Plug-and-play with **epiworldR** forward simulations  
+- 🧹 Memory management helpers: `check_model_status()`, `cleanup_model()`
 
 ---
 
 ## 📁 Installation
 
-This package is not yet on CRAN. To install it from GitHub:
+This package is not yet on CRAN. Install from GitHub:
 
 ```r
 # install.packages("devtools")
 devtools::install_github("sima-njf/epiworldRcalibrate")
-````
+```
+
+### Suggested Dependencies
+
+```r
+install.packages(c("epiworldR", "reticulate", "tidyverse", "ggplot2", "patchwork"))
+```
+
+> **Note (Python/reticulate):** You’ll need a Python environment with PyTorch installed.  
+> Example:
+> ```r
+> library(reticulate)
+> # Use a specific environment if desired:
+> # use_virtualenv("~/.venv/epiworldRcalibrate", required = TRUE)
+> # Or:
+> # use_condaenv("epiworldRcalibrate", required = TRUE)
+> py_config()
+> ```
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (One-Step)
 
 ```r
 library(epiworldRcalibrate)
-library(reticulate)
 
-# Step 1: Load the model (once per session)
-init_bilstm_model("~/Desktop/epiworldRcalibrate_fixed/epiworldRcalibrate/inst/models")
-
-# Step 2: Generate a sample incidence time series
+# 1) Provide exactly 61 consecutive daily case counts
+# (Replace with your real data)
 set.seed(42)
-incidence <- abs(rnorm(61, mean = 100, sd = 20))
+my_incidence <- pmax(0, round(rnorm(61, mean = 100, sd = 25)))
 
-# Step 3: Predict parameters
-params <- predict_sir_bilstm(incidence, n = 5000, recov = 0.1)
+# 2) Required context
+population_size <- 8000        # total population (n)
+recovery_rate   <- 1/10        # e.g., 10-day infectious period
+
+# 3) One-step BiLSTM parameter estimation
+params <- quick_estimate_sir(
+  daily_cases    = my_incidence,
+  population_size = population_size,
+  recovery_rate   = recovery_rate
+)
 
 print(params)
-#> $ptran
-#> [1] 0.01234
-#> $crate
-#> [1] 3.456
-#> $R0
-#> [1] 2.345
+# $ptran
+# [1] 0.0123
+# $crate
+# [1] 3.45
+# $R0
+# [1] 2.34
 ```
 
----
+**Input requirements**
 
-## 📂 Model File Requirements
-
-To use `init_bilstm_model()`, your model directory must contain:
-
-* `model4_bilstm.pt` — trained PyTorch model
-* `scaler_additional.pkl` — scaler for covariates (e.g., `n`, `recov`)
-* `scaler_targets.pkl` — scaler for predicted parameters
-* `scaler_incidence.pkl` — scaler for time series inputs
+- `daily_cases`: numeric vector of length **61** (no missing days)  
+- `population_size`: positive integer  
+- `recovery_rate`: positive numeric (e.g., `1/7` for 7-day infectious period)
 
 ---
 
-## 🧼 Clean Up
+## 🧭 What the Model Sees (Preprocessing)
 
-To free memory at the end of your session:
+The model ingests a transformed version of your incidence series.  
+Use `show_preprocessing()` to preview the transformation on a short window:
 
 ```r
-cleanup_bilstm_model()
+# Example on first 10 days
+show_preprocessing(my_incidence[1:10])
+# Day 0 is 0; subsequent days are percent changes relative to previous non-zero
 ```
 
 ---
 
-## 📖 Vignette
+## ⚙️ Advanced: Manual Model Control
 
-See `vignettes/` folder or run:
+If you need explicit lifecycle management (e.g., big simulation loops), you can load the model once:
+
+```r
+library(epiworldRcalibrate)
+
+# (Optional) Initialize the pre-trained BiLSTM model explicitly
+init_bilstm_model()  # if path is needed, pass model_dir = "path/to/models"
+
+# Estimate parameters (same outputs as quick_estimate_sir)
+manual <- estimate_sir_parameters(
+  daily_cases     = my_incidence,
+  population_size = population_size,
+  recovery_rate   = recovery_rate
+)
+
+# Check status
+status <- check_model_status()
+cat("Model loaded:", status$loaded, "\n")
+cat("Model directory:", status$model_directory, "\n")
+
+# Free memory when done
+cleanup_model()
+```
+
+---
+
+## 📂 Model Files (when using a custom model directory)
+
+If you pass a custom `model_dir` to `init_bilstm_model()`, that folder must include:
+
+- `model4_bilstm.pt` — trained PyTorch model  
+- `scaler_incidence.pkl` — scaler for time-series inputs  
+- `scaler_additional.pkl` — scaler for covariates (e.g., `n`, `recov`)  
+- `scaler_targets.pkl` — scaler for predicted parameters
+
+---
+
+## 🔁 Typical Workflow with **epiworldR**
+
+1. Simulate or collect 61-day incidence counts.  
+2. Estimate parameters with `quick_estimate_sir()`.  
+3. Plug the estimates into your **epiworldR** SIR model and simulate forward.  
+4. Compare true vs. predicted trajectories; quantify bias.
+
+Example sketch:
+
+```r
+library(epiworldR)
+# (After obtaining params from quick_estimate_sir)
+m <- ModelSIRCONN(
+  name              = "calibrated",
+  n                 = population_size,
+  prevalence        = 0.01,
+  contact_rate      = params$crate,
+  transmission_rate = params$ptran,
+  recovery_rate     = recovery_rate
+)
+run(m, ndays = 60)
+plot_incidence(m, plot = TRUE)
+```
+
+---
+
+## 🧪 Vignette
+
+A full end-to-end example (true vs. predicted parameters, repeated forward sims, bias tables, and plots) is available in the package vignette:
 
 ```r
 browseVignettes("epiworldRcalibrate")
@@ -101,24 +185,22 @@ browseVignettes("epiworldRcalibrate")
 
 ---
 
+## ❗ Troubleshooting
+
+- **“Length of daily_cases must be 61”**  
+  Ensure your input vector has exactly 61 elements (no NAs).
+- **reticulate / Python errors**  
+  Verify your Python env has PyTorch and that `reticulate::py_config()` points to it.
+- **Long runs / memory**  
+  For heavy loops, load once via `init_bilstm_model()` and call `cleanup_model()` at the end.
+
+---
+
 ## 🔗 Project Links
 
-* 📁 GitHub Repo: [https://github.com/sima-njf/epiworldRcalibrate](https://github.com/sima-njf/epiworldRcalibrate)
+- GitHub: <https://github.com/sima-njf/epiworldRcalibrate>
 
 ---
 
-## 🧪 Citation
-
-If you use this package in your work, please cite the accompanying paper or mention the GitHub repo.
-
----
-
-````
-
-You can paste this directly into your `README.Rmd` file and render it with:
-
-```r
-devtools::build_readme()
-````
-
+## 🧾 Citation
 
