@@ -1,13 +1,17 @@
 # Workflow derived from https://github.com/r-lib/actions/tree/v2/examples
 # Need help debugging build failures? Start at https://github.com/r-lib/actions#where-to-find-help
+
 on:
   push:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+
 name: R-CMD-check
+
 env:
   GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
 jobs:
   R-CMD-check:
     runs-on: ${{ matrix.config.os }}
@@ -16,53 +20,81 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - {os: macOS-latest,   r: 'release'}
-          - {os: windows-latest, r: 'release'}
-          - {os: windows-latest, r: 'devel', http-user-agent: 'release'}
-          - {os: ubuntu-latest,  r: 'devel', http-user-agent: 'release'}
-          - {os: ubuntu-latest,  r: 'release'}
-          - {os: ubuntu-latest,  r: 'oldrel'}
+          - { os: macOS-latest,   r: 'release' }
+          - { os: windows-latest, r: 'release' }
+          - { os: windows-latest, r: 'devel',  http-user-agent: 'release' }
+          - { os: ubuntu-latest,  r: 'devel',  http-user-agent: 'release' }
+          - { os: ubuntu-latest,  r: 'release' }
+          - { os: ubuntu-latest,  r: 'oldrel' }
+
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: r-lib/actions/setup-r@v2
         with:
           r-version: ${{ matrix.config.r }}
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::rcmdcheck
           needs: check
           install-pandoc: true
 
-      # Installing the package and checking the installation
-      # and building log
+      # ---------- Python + Torch for reticulate (Linux only) ----------
+      # Ensure reticulate sees a Python with CPU-only torch so vignettes can run.
+      - name: Set up Python for reticulate
+        if: ${{ matrix.config.os == 'ubuntu-latest' }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install CPU-only torch for reticulate
+        if: ${{ matrix.config.os == 'ubuntu-latest' }}
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch
+          python -m pip install numpy
+
+      - name: Tell reticulate which Python to use
+        if: ${{ matrix.config.os == 'ubuntu-latest' }}
+        run: echo "RETICULATE_PYTHON=$(which python)" >> $GITHUB_ENV
+      # ----------------------------------------------------------------
+
+      # Installing the package and showing installation log (Windows only)
       - name: Install the package and show installation log
         if: ${{ matrix.config.os == 'windows-latest' }}
         run: |
           Rscript -e "install.packages('.', repos = NULL, type = 'source')"
           Rscript -e "library(epiworldRcalibrate)"
 
+      # Primary check: Ubuntu release builds vignettes (torch available)
       - uses: r-lib/actions/check-r-package@v2
         if: ${{ matrix.config.os == 'ubuntu-latest' && matrix.config.r == 'release' }}
         with:
           args: 'c("--as-cran", "--no-manual")'
+          build-vignettes: true
           upload-snapshots: false
           upload-results: false
           check-dir: '"check"'
           error-on: '"warning"'
 
+      # Other matrix entries: no vignettes (faster/leaner)
       - uses: r-lib/actions/check-r-package@v2
         if: ${{ matrix.config.os != 'ubuntu-latest' || matrix.config.r != 'release' }}
         with:
+          build-vignettes: false
           upload-snapshots: false
           upload-results: true
           check-dir: '"check"'
           error-on: '"warning"'
 
+      # Build tarball on Ubuntu (release & devel) for artifacts
       - name: Build the package
         if: ${{ matrix.config.os == 'ubuntu-latest' && (matrix.config.r == 'release' || matrix.config.r == 'devel') }}
         run: R CMD build .
