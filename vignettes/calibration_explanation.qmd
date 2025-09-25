@@ -21,6 +21,28 @@ library(ggplot2)
 library(patchwork)
 ```
 
+```{r}
+#| label: _setup-reticulate
+#| include: false
+
+# Make sure reticulate doesn't try to create its own Miniconda env on CI
+Sys.setenv(RETICULATE_MINICONDA_ENABLED = "FALSE")
+
+# If the workflow exported RETICULATE_PYTHON, point reticulate to it
+py <- Sys.getenv("RETICULATE_PYTHON", unset = "")
+if (nzchar(py)) {
+  try(reticulate::use_python(py, required = FALSE), silent = TRUE)
+}
+
+# Check all Python modules you rely on
+required_py <- c("torch", "joblib", "numpy")
+avail <- vapply(required_py, reticulate::py_module_available, logical(1))
+missing_py <- required_py[!avail]
+py_ok <- all(avail)
+
+# Keep vignette robust: never hard-stop the whole build
+knitr::opts_chunk$set(error = FALSE, warning = TRUE)
+```
 ## Generate a Single Parameter Set
 We randomly generate a single set of SIR model parameters to simulate a ground-truth epidemic.
 
