@@ -37,4 +37,4 @@ Imports:
     reticulate,
     tidyverse,
     patchwork
-VignetteBuilder: knitr
+VignetteBuilder: quarto
