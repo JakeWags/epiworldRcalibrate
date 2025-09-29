@@ -12,7 +12,6 @@ navbar:
       href: reference/index.html
   right:
     - icon: fab fa-github
-      aria-label: "GitHub repository"
       href: "https://github.com/sima-njf/epiworldRcalibrate"
 
 home:
