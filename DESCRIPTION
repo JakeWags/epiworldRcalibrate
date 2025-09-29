@@ -1,6 +1,5 @@
 URL: https://sima-njf.github.io/epiworldRcalibrate/, https://github.com/sima-njf/epiworldRcalibrate
 BugReports: https://github.com/sima-njf/epiworldRcalibrate/issues
-
 Package: epiworldRcalibrate
 Title: Calibration with LSTM models
 Version: 0.0.1
