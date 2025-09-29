@@ -30,13 +30,14 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::pkgdown, any::xml2, any::quarto
+          extra-packages: any::pkgdown, any::xml2, any::quarto, any::rmarkdown, any::knitr, any::tidyverse, any::ggplot2, any::patchwork, any::epiworldR
           needs: website
 
       - name: Verify Quarto installation
         run: |
           quarto --version
           which quarto
+          quarto check
 
       - name: Install package
         run: R CMD INSTALL .
@@ -45,7 +46,8 @@ jobs:
         run: |
           Rscript -e "
           library(pkgdown)
-          build_site_github_pages(new_process = FALSE, install = FALSE)
+          library(quarto)
+          build_site_github_pages(new_process = FALSE, install = FALSE, preview = FALSE)
           "
 
       - name: Deploy to GitHub pages
