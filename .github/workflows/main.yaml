@@ -33,7 +33,7 @@ jobs:
           
       - name: Install Python dependencies
         run: |
-          pip install scikit-learn
+          pip install scikit-learn joblib numpy torch --index-url https://download.pytorch.org/whl/cpu
         shell: bash
           
       - name: Render Quarto vignettes
