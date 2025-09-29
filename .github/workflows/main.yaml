@@ -47,7 +47,7 @@ jobs:
           Rscript -e "
           library(pkgdown)
           library(quarto)
-          build_site_github_pages(new_process = FALSE, install = FALSE, preview = FALSE)
+          build_site_github_pages(new_process = FALSE, install = FALSE)
           "
 
       - name: Deploy to GitHub pages
