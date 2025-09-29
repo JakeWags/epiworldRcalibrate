@@ -1,5 +1,12 @@
 # Workflow derived from https://github.com/r-lib/actions/tree/v2/examples
-# Need help debugging build failures? Start at https://github.com/r-lib/actions#where-to-find-help
+# This version:
+# - Installs Python + torch + scikit-learn on Ubuntu for reticulate
+# - Builds vignettes only on ubuntu-latest (R release)
+# - Skips vignettes elsewhere for speed/reliability
+# - Uses valid inputs for r-lib/actions/check-r-package@v2
+# - Builds tarballs as artifacts
+
+name: R-CMD-check
 
 on:
   push:
@@ -7,10 +14,9 @@ on:
   pull_request:
     branches: [main, master]
 
-name: R-CMD-check
-
 env:
   GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+  R_KEEP_PKG_SOURCE: yes
 
 jobs:
   R-CMD-check:
@@ -20,16 +26,12 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - {os: macOS-latest,   r: 'release'}
-          - {os: windows-latest, r: 'release'}
-          - {os: windows-latest, r: 'devel',  http-user-agent: 'release'}
-          - {os: ubuntu-latest,  r: 'devel',  http-user-agent: 'release'}
-          - {os: ubuntu-latest,  r: 'release'}
-          - {os: ubuntu-latest,  r: 'oldrel'}
-
-    env:
-      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
-      R_KEEP_PKG_SOURCE: yes
+          - { os: macOS-latest,   r: 'release' }
+          - { os: windows-latest, r: 'release' }
+          - { os: windows-latest, r: 'devel',  http-user-agent: 'release' }
+          - { os: ubuntu-latest,  r: 'devel',  http-user-agent: 'release' }
+          - { os: ubuntu-latest,  r: 'release' }
+          - { os: ubuntu-latest,  r: 'oldrel' }
 
     steps:
       - uses: actions/checkout@v4
@@ -46,8 +48,7 @@ jobs:
           needs: check
           install-pandoc: true
 
-      # ---------- Python + Torch (+extras) for reticulate (Linux only) ----------
-      # Place these steps AFTER setup-r-dependencies and BEFORE check-r-package.
+      # ---------- Python + Torch (+extras) for reticulate (Ubuntu only) ----------
       - name: Set up Python for reticulate
         if: ${{ matrix.config.os == 'ubuntu-latest' }}
         uses: actions/setup-python@v5
@@ -60,50 +61,63 @@ jobs:
           python -m pip install --upgrade pip
           # Torch CPU wheel
           python -m pip install --index-url https://download.pytorch.org/whl/cpu torch
-          # Light deps your code uses:
-          python -m pip install numpy joblib
-
+          # Deps used by your vignette/model loader
+          python -m pip install numpy joblib scikit-learn
       - name: Tell reticulate which Python to use
         if: ${{ matrix.config.os == 'ubuntu-latest' }}
         run: echo "RETICULATE_PYTHON=$(which python)" >> $GITHUB_ENV
       # --------------------------------------------------------------------------
 
       # Installing the package and showing installation log (Windows only)
+      # Ensure vignettes are not built on Windows
       - name: Install the package and show installation log
         if: ${{ matrix.config.os == 'windows-latest' }}
+        shell: bash
         run: |
-          Rscript -e "install.packages('.', repos = NULL, type = 'source')"
+          Rscript -e "Sys.setenv(R_BUILD_VIGNETTES='false'); install.packages('.', repos = NULL, type = 'source')"
           Rscript -e "library(epiworldRcalibrate)"
 
-      # Primary check: Ubuntu release builds vignettes (torch available)
+      # Primary check: Ubuntu (release) builds vignettes (Python deps available)
       - uses: r-lib/actions/check-r-package@v2
         if: ${{ matrix.config.os == 'ubuntu-latest' && matrix.config.r == 'release' }}
         with:
-          args: 'c("--as-cran", "--no-manual")'
-          build-vignettes: true
+          # R CMD check args
+          args: 'c("--as-cran","--no-manual")'
+          # R CMD build args (do not skip vignettes here)
+          build_args: 'c("--no-manual")'
           upload-snapshots: false
           upload-results: false
           check-dir: '"check"'
-          error-on: '"warning"'
+          error-on: warning
 
-      # Other matrix entries: no vignettes (faster/leaner)
+      # Other matrix entries: skip vignettes for speed/stability
       - uses: r-lib/actions/check-r-package@v2
         if: ${{ matrix.config.os != 'ubuntu-latest' || matrix.config.r != 'release' }}
         with:
-          build-vignettes: false
+          # Skip building vignettes at build time
+          build_args: 'c("--no-build-vignettes","--no-manual")'
+          # Ignore vignettes during check
+          args: 'c("--as-cran","--no-manual","--ignore-vignettes")'
           upload-snapshots: false
           upload-results: true
           check-dir: '"check"'
-          error-on: '"warning"'
+          error-on: warning
 
-      # Build tarball on Ubuntu (release & devel) for artifacts
-      - name: Build the package
-        if: ${{ matrix.config.os == 'ubuntu-latest' && (matrix.config.r == 'release' || matrix.config.r == 'devel') }}
-        run: R CMD build .
+      # Build tarballs as artifacts
+      # Ubuntu release: build with vignettes (Python deps present)
+      - name: Build tarball (Ubuntu release, with vignettes)
+        if: ${{ matrix.config.os == 'ubuntu-latest' && matrix.config.r == 'release' }}
+        run: R CMD build . --no-manual
+
+      # Ubuntu devel: build without vignettes
+      - name: Build tarball (Ubuntu devel, no vignettes)
+        if: ${{ matrix.config.os == 'ubuntu-latest' && matrix.config.r == 'devel' }}
+        run: R CMD build . --no-build-vignettes --no-manual
 
       - uses: actions/upload-artifact@v4
         if: ${{ matrix.config.os == 'ubuntu-latest' && (matrix.config.r == 'release' || matrix.config.r == 'devel') }}
         with:
           name: epiworldRcalibrate-built-package-${{ matrix.config.os }}-${{ matrix.config.r }}
-          path: epiworldRcalibrate*.tar.gz
+          path: |
+            epiworldRcalibrate_*.tar.gz
           retention-days: 7
