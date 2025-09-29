@@ -34,7 +34,7 @@ Imports:
     dplyr,
     ggplot2 (>= 3.4.0),
     stats,
-    reticulate,
+    reticulate (>= 1.2),
     tidyverse,
     patchwork
 VignetteBuilder: quarto

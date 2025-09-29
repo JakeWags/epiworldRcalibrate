@@ -2,87 +2,13 @@
 % Please edit documentation in R/calibrate_sir_bilstm.R
 \name{estimate_sir_parameters}
 \alias{estimate_sir_parameters}
-\title{Estimate SIR Parameters from Daily Incidence Data}
+\title{Estimate SIR Parameters from 61-day incidence}
 \usage{
 estimate_sir_parameters(daily_cases, population_size, recovery_rate)
 }
-\arguments{
-\item{daily_cases}{Numeric vector of exactly 61 consecutive daily case counts (day 0 to day 60)}
-
-\item{population_size}{Numeric. Total population size for the outbreak}
-
-\item{recovery_rate}{Numeric. Recovery rate (1/average_infectious_period_in_days)}
-}
 \value{
-Named numeric vector with three components:
-\describe{
-\item{ptran}{Transmission probability per contact}
-\item{crate}{Contact rate (contacts per person per day)}
-\item{R0}{Basic reproduction number}
-}
+named numeric vector: ptran, crate, R0
 }
 \description{
-Estimate SIR Parameters from Daily Incidence Data
-}
-\details{
-This function estimates SIR model parameters from daily incidence data using a
-pre-trained BiLSTM neural network.
-
-\strong{Data Flow:}
-\enumerate{
-\item Takes your raw daily case counts for 61 days (e.g., \link{5, 8, 12, 15, 23, ...})
-\item Automatically converts to percentage changes (e.g., \link{0, 0.6, 0.5, 0.25, 0.53, ...})
-\item Feeds processed data through the trained neural network
-\item Returns calibrated SIR parameters
-}
-
-\strong{Requirements:}
-\itemize{
-\item Exactly 61 consecutive days of case count data (day 0 through day 60)
-\item Case counts should be non-negative integers
-\item Must call \code{\link{init_bilstm_model}} first
-}
-}
-\examples{
-\dontrun{
-# Step 1: Initialize the model (once per R session)
-init_bilstm_model()
-
-# Step 2: Prepare your outbreak data (61 consecutive days: day 0 to day 60)
-my_outbreak_data <- c(
-  # Day 0-6: Initial cases
-  2, 3, 5, 8, 12, 18, 25,
-  # Day 7-20: Early growth phase
-  35, 48, 65, 85, 108, 135, 165, 198, 235, 275, 318, 362, 405, 448,
-  # Day 21-34: Peak period
-  485, 518, 545, 565, 580, 590, 595, 595, 590, 580, 565, 545, 520, 490,
-  # Day 35-48: Decline phase
-  455, 415, 370, 325, 280, 238, 200, 165, 135, 108, 85, 65, 48, 35,
-  # Day 49-55: Late decline
-  25, 18, 12, 8, 5, 3, 2,
-  # Day 56-60: Final phase
-  1, 1, 0, 1, 0
-)
-
-# Verify we have exactly 61 days
-length(my_outbreak_data)  # Should be 61
-
-# Step 3: Estimate SIR parameters
-sir_params <- estimate_sir_parameters(
-  daily_cases = my_outbreak_data,
-  population_size = 10000,
-  recovery_rate = 1/7  # 7-day average infectious period
-)
-
-# Step 4: View results
-print(sir_params)
-# Example output:
-#   ptran    crate       R0
-# 0.0234   12.456    2.134
-
-# Access individual parameters
-transmission_prob <- sir_params["ptran"]
-contact_rate <- sir_params["crate"]
-basic_reproduction_number <- sir_params["R0"]
-}
+Estimate SIR Parameters from 61-day incidence
 }

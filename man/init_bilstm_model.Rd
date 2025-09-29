@@ -7,34 +7,13 @@
 init_bilstm_model(model_dir = NULL, force_reload = FALSE)
 }
 \arguments{
-\item{model_dir}{Character. Path to directory containing model files.
-If NULL, uses default model directory}
+\item{model_dir}{Optional path to directory with model files.}
 
-\item{force_reload}{Logical. Force reload even if model already loaded (default: FALSE)}
+\item{force_reload}{Force reload even if already loaded.}
 }
 \value{
-Logical. TRUE if model loaded successfully
+(invisible) TRUE on success
 }
 \description{
 Initialize BiLSTM Model for SIR Parameter Estimation
-}
-\details{
-This function loads the pre-trained BiLSTM model and scalers into memory.
-Must be called before using \code{\link{estimate_sir_parameters}}.
-
-Required files in \code{model_dir}:
-\itemize{
-\item model4_bilstm_relchange_no_eps.pt - PyTorch model weights
-\item scaler_additional_no_eps.pkl - Scaler for population size and recovery rate
-\item scaler_targets_no_eps.pkl - Scaler for transmission rate, contact rate, and R0
-}
-}
-\examples{
-\dontrun{
-# Initialize model (do this once per R session)
-init_bilstm_model()
-
-# Or specify custom model directory
-init_bilstm_model("/path/to/your/model/files")
-}
 }

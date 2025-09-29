@@ -2,13 +2,10 @@
 % Please edit documentation in R/calibrate_sir_bilstm.R
 \name{check_model_status}
 \alias{check_model_status}
-\title{Check Model Status}
+\title{Check model status}
 \usage{
 check_model_status()
 }
-\value{
-List with model loading status and directory
-}
 \description{
-Check Model Status
+Check model status
 }

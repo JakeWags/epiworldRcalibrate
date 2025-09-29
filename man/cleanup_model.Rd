@@ -2,17 +2,10 @@
 % Please edit documentation in R/calibrate_sir_bilstm.R
 \name{cleanup_model}
 \alias{cleanup_model}
-\title{Clean Up Model from Memory}
+\title{Clean up model from memory}
 \usage{
 cleanup_model()
 }
-\value{
-None (invisibly returns TRUE if successful)
-}
 \description{
-Clean Up Model from Memory
-}
-\details{
-Removes the loaded model and scalers from memory. Useful for freeing up
-resources in long-running R sessions.
+Clean up model from memory
 }
