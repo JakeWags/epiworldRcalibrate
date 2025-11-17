@@ -40,3 +40,4 @@ Imports:
     tidyverse,
     patchwork
 VignetteBuilder: quarto
+Config/reticulate/disallow-python-install: true
