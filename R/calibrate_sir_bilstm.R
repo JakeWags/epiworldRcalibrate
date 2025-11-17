@@ -19,50 +19,33 @@
 #' Find available Python installation
 #' @keywords internal
 .find_python <- function() {
-  # Check if user has set RETICULATE_PYTHON
   user_py <- Sys.getenv("RETICULATE_PYTHON", unset = "")
-  if (nzchar(user_py) && file.exists(user_py)) {
-    return(user_py)
-  }
+  if (nzchar(user_py) && file.exists(user_py)) return(user_py)
 
-  # Try to find Python using reticulate
   py_config <- tryCatch(reticulate::py_config(), error = function(e) NULL)
-  if (!is.null(py_config) && !is.null(py_config$python)) {
+  if (!is.null(py_config) && !is.null(py_config$python))
     return(py_config$python)
-  }
 
-  # Try common Python locations
   if (.Platform$OS.type == "windows") {
-    candidates <- c(
-      "python.exe",
-      "python3.exe",
-      file.path(Sys.getenv("LOCALAPPDATA"), "Programs/Python/*/python.exe")
-    )
+    candidates <- c("python.exe", "python3.exe",
+                    file.path(Sys.getenv("LOCALAPPDATA"), "Programs/Python/*/python.exe"))
   } else {
     candidates <- c(
-      "/usr/bin/python3",
-      "/usr/local/bin/python3",
-      "/usr/bin/python",
-      "/usr/local/bin/python",
+      "/usr/bin/python3", "/usr/local/bin/python3",
+      "/usr/bin/python", "/usr/local/bin/python",
       "/opt/homebrew/bin/python3",
       paste0(Sys.getenv("HOME"), "/.pyenv/shims/python3")
     )
   }
 
   for (py in candidates) {
-    if (file.exists(py)) {
-      return(py)
-    }
-    # Handle wildcards
+    if (file.exists(py)) return(py)
     if (grepl("\\*", py)) {
       matches <- Sys.glob(py)
-      if (length(matches) > 0) {
-        return(matches[1])
-      }
+      if (length(matches) > 0) return(matches[1])
     }
   }
 
-  # Try system command
   py_path <- tryCatch({
     if (.Platform$OS.type == "windows") {
       system2("where", "python", stdout = TRUE, stderr = FALSE)[1]
@@ -71,160 +54,70 @@
     }
   }, error = function(e) NULL)
 
-  if (!is.null(py_path) && nzchar(py_path) && file.exists(py_path)) {
+  if (!is.null(py_path) && nzchar(py_path) && file.exists(py_path))
     return(py_path)
-  }
 
   return(NULL)
 }
 
-#' Ensure Python is usable and required modules are present.
-#' - Respects RETICULATE_PYTHON if the user has set it.
-#' - Otherwise creates/uses a private virtualenv 'epiworldRcalibrate'
-#' - Installs numpy, scikit-learn, joblib, torch (CPU) if missing.
+#' Ensure Python + necessary modules are ready
 #' @keywords internal
 .ensure_python_ready <- function() {
-  # If the user pinned a Python, respect it.
+
   user_py <- Sys.getenv("RETICULATE_PYTHON", unset = "")
-
   if (nzchar(user_py)) {
-    # User has specified Python, use it directly
     message("Using user-specified Python: ", user_py)
-    tryCatch({
-      reticulate::use_python(user_py, required = TRUE)
-    }, error = function(e) {
-      stop("Failed to use specified Python at: ", user_py, "\n", e$message, call. = FALSE)
-    })
+    reticulate::use_python(user_py, required = TRUE)
   } else {
-    # Try to use virtual environment
     vname <- .bilstm_env$venv_name
-
-    # Check if virtualenv already exists
     envs <- tryCatch(reticulate::virtualenv_list(), error = function(e) character())
-
     if (vname %in% envs) {
-      # Virtualenv exists, use it
-      message("Using existing virtual environment: ", vname)
-      reticulate::use_virtualenv(virtualenv = vname, required = FALSE)
+      reticulate::use_virtualenv(vname, required = FALSE)
     } else {
-      # Need to create virtualenv - first find Python
       python_path <- .find_python()
+      if (is.null(python_path))
+        stop("Could not find Python. Install Python 3.7+ or set RETICULATE_PYTHON.")
 
-      if (is.null(python_path)) {
-        stop(
-          "Could not find Python installation. Please either:\n",
-          "  1. Install Python 3.7+ from python.org, or\n",
-          "  2. Set RETICULATE_PYTHON environment variable to your Python executable path\n",
-          "Example: Sys.setenv(RETICULATE_PYTHON = '/usr/bin/python3')",
-          call. = FALSE
-        )
-      }
-
-      message("Found Python at: ", python_path)
-      message("Creating virtual environment '", vname, "'...")
-
-      tryCatch({
-        reticulate::virtualenv_create(envname = vname, python = python_path)
-        message("Virtual environment created successfully")
-      }, error = function(e) {
-        stop(
-          "Failed to create virtual environment. Error: ", e$message, "\n",
-          "Try manually creating it with:\n",
-          "  reticulate::virtualenv_create('", vname, "', python = '", python_path, "')",
-          call. = FALSE
-        )
-      })
-
-      # Now use the newly created environment
-      reticulate::use_virtualenv(virtualenv = vname, required = FALSE)
+      reticulate::virtualenv_create(vname, python = python_path)
+      reticulate::use_virtualenv(vname, required = FALSE)
     }
   }
 
-  # Ensure Python is available
-  if (!reticulate::py_available(initialize = TRUE)) {
-    stop(
-      "Could not initialize Python. ",
-      "Please install Python 3.7+ or set RETICULATE_PYTHON environment variable.",
-      call. = FALSE
-    )
-  }
+  if (!reticulate::py_available(initialize = TRUE))
+    stop("Python could not be initialized.")
 
-  # Now ensure required modules are present
   needs <- c(
     numpy = !reticulate::py_module_available("numpy"),
     sklearn = !reticulate::py_module_available("sklearn"),
     joblib = !reticulate::py_module_available("joblib"),
-    torch  = !reticulate::py_module_available("torch")
+    torch = !reticulate::py_module_available("torch")
   )
 
   if (any(needs)) {
-    pkgs_to_install <- names(needs)[needs]
-    # Map sklearn to scikit-learn for pip
-    pkgs_to_install[pkgs_to_install == "sklearn"] <- "scikit-learn"
+    pkgs <- names(needs)[needs]
+    pkgs[pkgs == "sklearn"] <- "scikit-learn"
 
-    message("Installing missing Python packages: ", paste(pkgs_to_install, collapse = ", "))
-    message("This may take a few minutes...")
+    non_torch <- setdiff(pkgs, "torch")
+    if (length(non_torch)) reticulate::py_install(non_torch, pip = TRUE)
 
-    # Determine environment name for installation
-    env_for_install <- if (nzchar(Sys.getenv("RETICULATE_PYTHON", unset = ""))) {
-      NULL  # Install to system Python
-    } else {
-      .bilstm_env$venv_name  # Install to virtualenv
-    }
-
-    # Install numpy/scikit-learn/joblib first if torch is also missing
-    base_pkgs <- setdiff(pkgs_to_install, "torch")
-    if (length(base_pkgs)) {
-      tryCatch({
-        reticulate::py_install(base_pkgs, envname = env_for_install, pip = TRUE)
-        message("Successfully installed: ", paste(base_pkgs, collapse = ", "))
-      }, error = function(e) {
-        stop("Failed to install Python packages: ", e$message, call. = FALSE)
-      })
-    }
-
-    if ("torch" %in% pkgs_to_install) {
-      message("Installing PyTorch (CPU version)...")
-      # Prefer CPU wheels; fall back to default index if that fails
-      ok <- TRUE
-      tryCatch({
-        reticulate::py_install(
-          packages    = "torch",
-          envname     = env_for_install,
-          pip         = TRUE,
-          pip_options = c("--index-url", "https://download.pytorch.org/whl/cpu")
-        )
-        message("PyTorch installed successfully")
-      }, error = function(e) {
-        ok <<- FALSE
-        warning("Failed to install torch from CPU index, trying default...")
-      })
-      if (!ok) {
-        reticulate::py_install("torch", envname = env_for_install, pip = TRUE)
-      }
+    if ("torch" %in% pkgs) {
+      reticulate::py_install(
+        "torch", pip = TRUE,
+        pip_options = c("--index-url", "https://download.pytorch.org/whl/cpu")
+      )
     }
   }
 
-  # Verify critical modules are now available
-  critical_modules <- c("numpy", "sklearn", "joblib", "torch")
-  missing_after_install <- critical_modules[!sapply(critical_modules, reticulate::py_module_available)]
-  if (length(missing_after_install) > 0) {
-    stop(
-      "Failed to load required Python modules after installation: ",
-      paste(missing_after_install, collapse = ", "),
-      "\nTry manually installing with: reticulate::py_install(c('numpy', 'scikit-learn', 'joblib', 'torch'))",
-      call. = FALSE
-    )
-  }
-
-  message("Python environment ready with all required packages")
+  critical <- c("numpy", "sklearn", "joblib", "torch")
+  missing <- critical[!sapply(critical, reticulate::py_module_available)]
+  if (length(missing))
+    stop("Missing Python modules: ", paste(missing, collapse = ", "))
 }
 
 # =============================================================================
-# Embedded Python (as a string)
+# Embedded Python
 # =============================================================================
 
-#' Get Python model code
 #' @keywords internal
 .get_python_model_code <- function() {
   '
@@ -233,14 +126,12 @@ import torch.nn as nn
 import joblib
 import numpy as np
 
-# Global variables to store model and scalers
 _model = None
 _scaler_additional = None
 _scaler_targets = None
 _device = torch.device("cpu")
 
 class BiLSTMModel(nn.Module):
-    """BiLSTM model architecture for SIR parameter estimation"""
     def __init__(self, input_dim, hidden_dim, num_layers, additional_dim, output_dim, dropout):
         super().__init__()
         self.bilstm = nn.LSTM(
@@ -262,18 +153,13 @@ class BiLSTMModel(nn.Module):
         h = torch.relu(self.fc1(torch.cat((h, add_inputs), dim=1)))
         out = self.fc2(h)
         out = torch.stack([
-            self.sigmoid(out[:, 0]),    # ptran (0-1)
-            self.softplus(out[:, 1]),   # crate (>0)
-            self.softplus(out[:, 2]),   # R0 (>0)
+            self.sigmoid(out[:, 0]),
+            self.softplus(out[:, 1]),
+            self.softplus(out[:, 2]),
         ], dim=1)
         return out
 
 def preprocess_incidence_data(raw_counts):
-    """
-    Convert raw daily incidence counts to percentage changes.
-    - Day 0: 0
-    - Else: (c[i] - c[i-1]) / c[i-1] if c[i-1] > 0, else 0
-    """
     raw_counts = np.asarray(raw_counts, dtype=float)
     percentage_changes = np.zeros_like(raw_counts)
     percentage_changes[1:] = np.where(
@@ -284,36 +170,30 @@ def preprocess_incidence_data(raw_counts):
     return percentage_changes
 
 def load_model_components(model_path, scaler_add_path, scaler_tgt_path):
-    """Load the trained model and scalers"""
     global _model, _scaler_additional, _scaler_targets
 
-    try:
-        _scaler_additional = joblib.load(scaler_add_path)
-        _scaler_targets = joblib.load(scaler_tgt_path)
+    _scaler_additional = joblib.load(scaler_add_path)
+    _scaler_targets = joblib.load(scaler_tgt_path)
 
-        _model = BiLSTMModel(
-            input_dim=1,
-            hidden_dim=160,
-            num_layers=3,
-            additional_dim=2,
-            output_dim=3,
-            dropout=0.5
-        )
+    _model = BiLSTMModel(
+        input_dim=1,
+        hidden_dim=160,
+        num_layers=3,
+        additional_dim=2,
+        output_dim=3,
+        dropout=0.5
+    )
 
-        state_dict = torch.load(model_path, map_location=_device)
-        _model.load_state_dict(state_dict)
-        _model.to(_device)
-        _model.eval()
-        return True
-
-    except Exception as e:
-        raise RuntimeError(f"Failed to load model components: {str(e)}")
+    state_dict = torch.load(model_path, map_location=_device)
+    _model.load_state_dict(state_dict)
+    _model.to(_device)
+    _model.eval()
+    return True
 
 def predict_sir_parameters(raw_incidence_counts, population_size, recovery_rate):
-    """Predict [ptran, crate, R0] from raw incidence counts (length 61)"""
     global _model, _scaler_additional, _scaler_targets
     if _model is None:
-        raise RuntimeError("Model not loaded. Call load_model_components() first.")
+        raise RuntimeError("Model not loaded.")
 
     raw_incidence_counts = np.asarray(raw_incidence_counts, dtype=float)
     if len(raw_incidence_counts) != 61:
@@ -321,15 +201,13 @@ def predict_sir_parameters(raw_incidence_counts, population_size, recovery_rate)
 
     processed_incidence = preprocess_incidence_data(raw_incidence_counts)
 
-    X_tensor = torch.tensor(
-        processed_incidence.reshape(1, -1, 1),
-        dtype=torch.float32,
-        device=_device
-    )
+    X_tensor = torch.tensor(processed_incidence.reshape(1, -1, 1),
+                            dtype=torch.float32, device=_device)
 
     add_inputs = np.array([[population_size, recovery_rate]], dtype=float)
     add_inputs_scaled = _scaler_additional.transform(add_inputs)
-    add_tensor = torch.tensor(add_inputs_scaled, dtype=torch.float32, device=_device)
+    add_tensor = torch.tensor(add_inputs_scaled,
+                              dtype=torch.float32, device=_device)
 
     with torch.no_grad():
         pred_scaled = _model(X_tensor, add_tensor).cpu().numpy()
@@ -338,7 +216,6 @@ def predict_sir_parameters(raw_incidence_counts, population_size, recovery_rate)
     return pred_original[0].tolist()
 
 def cleanup_model():
-    """Clean up model and scalers from memory"""
     global _model, _scaler_additional, _scaler_targets
     _model = None
     _scaler_additional = None
@@ -351,64 +228,46 @@ def cleanup_model():
 # Helpers
 # =============================================================================
 
-# Validate model directory and get file paths
 #' @keywords internal
 .validate_model_directory <- function(model_dir) {
-  if (!dir.exists(model_dir)) {
-    stop("Model directory does not exist: ", model_dir, call. = FALSE)
-  }
-  base_dir <- normalizePath(model_dir, winslash = "/", mustWork = TRUE)
+  if (!dir.exists(model_dir))
+    stop("Model directory does not exist: ", model_dir)
 
+  base_dir <- normalizePath(model_dir, winslash = "/", mustWork = TRUE)
   file_paths <- list(
-    model      = file.path(base_dir, "model4_bilstm_relchange_no_eps.pt"),
+    model = file.path(base_dir, "model4_bilstm_relchange_no_eps.pt"),
     scaler_add = file.path(base_dir, "scaler_additional_no_eps.pkl"),
     scaler_tgt = file.path(base_dir, "scaler_targets_no_eps.pkl")
   )
 
   missing <- names(file_paths)[!vapply(file_paths, file.exists, logical(1))]
-  if (length(missing) > 0) {
-    stop(
-      "Required model files not found: ",
-      paste(basename(unlist(file_paths[missing], use.names = FALSE)), collapse = ", "),
-      call. = FALSE
-    )
-  }
+  if (length(missing))
+    stop("Missing model files: ", paste(missing, collapse = ", "))
+
   file_paths
 }
 
-# Get default model directory (inst/models)
 #' @keywords internal
 .get_model_directory <- function(model_dir = NULL) {
   if (!is.null(model_dir)) return(model_dir)
+
   pkg_model_dir <- system.file("models", package = "epiworldRcalibrate")
-  if (pkg_model_dir == "") {
-    stop(
-      "Model directory not found. Ensure the package is installed with model assets, ",
-      "or provide model_dir explicitly.",
-      call. = FALSE
-    )
-  }
+  if (pkg_model_dir == "") stop("Model directory not found.")
   pkg_model_dir
 }
 
-# Validate inputs
 #' @keywords internal
 .validate_sir_inputs <- function(daily_cases, population_size, recovery_rate) {
-  if (!is.numeric(daily_cases)) stop("daily_cases must be numeric", call. = FALSE)
-  if (length(daily_cases) != 61) {
-    stop(
-      "daily_cases must contain exactly 61 values (day 0 to day 60). Received: ",
-      length(daily_cases), call. = FALSE
-    )
-  }
-  if (any(daily_cases < 0)) stop("daily_cases cannot contain negative values", call. = FALSE)
+  if (!is.numeric(daily_cases)) stop("daily_cases must be numeric")
+  if (length(daily_cases) != 61)
+    stop("daily_cases must have length 61")
+  if (any(daily_cases < 0)) stop("daily_cases cannot be negative")
   if (!is.numeric(population_size) || length(population_size) != 1)
-    stop("population_size must be a single numeric value", call. = FALSE)
-  if (population_size <= 0) stop("population_size must be positive", call. = FALSE)
+    stop("population_size must be single numeric")
+  if (population_size <= 0) stop("population_size must be positive")
   if (!is.numeric(recovery_rate) || length(recovery_rate) != 1)
-    stop("recovery_rate must be a single numeric value", call. = FALSE)
-  if (recovery_rate <= 0) stop("recovery_rate must be positive", call. = FALSE)
-  invisible(TRUE)
+    stop("recovery_rate must be single numeric")
+  if (recovery_rate <= 0) stop("recovery_rate must be positive")
 }
 
 # =============================================================================
@@ -416,86 +275,87 @@ def cleanup_model():
 # =============================================================================
 
 #' Initialize BiLSTM Model for SIR Parameter Estimation
-#' @param model_dir Optional path to directory with model files.
-#' @param force_reload Force reload even if already loaded.
-#' @return (invisible) TRUE on success
+#'
+#' @param model_dir Optional path to model directory. Defaults to the
+#'   package's bundled model files.
+#' @param force_reload Logical; reload even if already loaded.
+#'
+#' @return Invisibly returns `TRUE` on success.
 #' @export
 init_bilstm_model <- function(model_dir = NULL, force_reload = FALSE) {
 
-  # Resolve model dir bundled in the package unless overridden
   model_dir <- .get_model_directory(model_dir)
 
-  # Early exit if already loaded and same dir
-  if (.bilstm_env$model_loaded && !force_reload && identical(.bilstm_env$model_dir, model_dir)) {
-    message("BiLSTM model already loaded. Use force_reload=TRUE to reload.")
+  if (.bilstm_env$model_loaded &&
+      !force_reload &&
+      identical(.bilstm_env$model_dir, model_dir)) {
+    message("Model already loaded.")
     return(invisible(TRUE))
   }
 
-  # Check files exist
   file_paths <- .validate_model_directory(model_dir)
-
-  # Make sure Python & modules are ready
   .ensure_python_ready()
 
-  # Initialize Python namespace with our model code
-  tryCatch({
-    reticulate::py_run_string(.get_python_model_code())
-    message("Python environment initialized.")
-  }, error = function(e) {
-    stop("Failed to initialize Python environment: ", e$message, call. = FALSE)
-  })
+  reticulate::py_run_string(.get_python_model_code())
 
-  # Load model & scalers
-  tryCatch({
-    reticulate::py$load_model_components(
-      model_path      = file_paths[["model"]],
-      scaler_add_path = file_paths[["scaler_add"]],
-      scaler_tgt_path = file_paths[["scaler_tgt"]]
-    )
-    .bilstm_env$model_loaded <- TRUE
-    .bilstm_env$model_dir    <- model_dir
-    message("BiLSTM model loaded successfully. Ready to estimate SIR parameters.")
-    invisible(TRUE)
-  }, error = function(e) {
-    .bilstm_env$model_loaded <- FALSE
-    stop("Failed to load model: ", e$message, call. = FALSE)
-  })
+  reticulate::py$load_model_components(
+    model_path = file_paths$model,
+    scaler_add_path = file_paths$scaler_add,
+    scaler_tgt_path = file_paths$scaler_tgt
+  )
+
+  .bilstm_env$model_loaded <- TRUE
+  .bilstm_env$model_dir <- model_dir
+  message("BiLSTM model loaded successfully.")
+  invisible(TRUE)
 }
 
 #' Estimate SIR Parameters from 61-day incidence
-#' @return named numeric vector: ptran, crate, R0
+#'
+#' @param daily_cases Numeric vector of length 61 with daily incidence
+#'   counts (days 0–60).
+#' @param population_size Total population size (single numeric).
+#' @param recovery_rate Recovery rate parameter (single numeric).
+#'
+#' @return A named numeric vector with:
+#'   * `ptran` – transmission probability
+#'   * `crate` – contact rate
+#'   * `R0` – basic reproduction number
 #' @export
 estimate_sir_parameters <- function(daily_cases, population_size, recovery_rate) {
-  if (!.bilstm_env$model_loaded) {
-    stop("BiLSTM model not loaded. Please call init_bilstm_model() first.", call. = FALSE)
-  }
+  if (!.bilstm_env$model_loaded)
+    stop("Model not loaded. Call init_bilstm_model().")
 
   .validate_sir_inputs(daily_cases, population_size, recovery_rate)
 
-  tryCatch({
-    result <- reticulate::py$predict_sir_parameters(
-      as.numeric(daily_cases),
-      as.numeric(population_size),
-      as.numeric(recovery_rate)
-    )
-    names(result) <- c("ptran", "crate", "R0")
-    result
-  }, error = function(e) {
-    stop("Parameter estimation failed: ", e$message, call. = FALSE)
-  })
+  out <- reticulate::py$predict_sir_parameters(
+    as.numeric(daily_cases),
+    as.numeric(population_size),
+    as.numeric(recovery_rate)
+  )
+  names(out) <- c("ptran", "crate", "R0")
+  out
 }
 
-#' Calibrate SIR Parameters (one-step)
+#' Calibrate SIR Parameters (convenience wrapper)
+#'
+#' @param daily_cases Numeric vector of length 61.
+#' @param population_size Population size.
+#' @param recovery_rate Recovery rate.
+#' @param model_dir Optional model directory path.
+#' @param auto_init Logical; automatically initialize model if needed.
+#'
+#' @return Named numeric vector: `ptran`, `crate`, `R0`.
 #' @export
 calibrate_sir <- function(daily_cases,
                           population_size,
                           recovery_rate,
                           model_dir = NULL,
                           auto_init = TRUE) {
-  if (!.bilstm_env$model_loaded && auto_init) {
-    message("Model not loaded. Initializing automatically...")
-    init_bilstm_model(model_dir = model_dir)
-  }
+
+  if (!.bilstm_env$model_loaded && auto_init)
+    init_bilstm_model(model_dir)
+
   estimate_sir_parameters(daily_cases, population_size, recovery_rate)
 }
 
@@ -503,12 +363,21 @@ calibrate_sir <- function(daily_cases,
 # Utilities
 # =============================================================================
 
-#' Demonstrate preprocessing (not required for prediction)
+#' Show preprocessing transformation on incidence data
+#'
+#' @param raw_counts Numeric vector of raw daily incidence counts.
+#'
+#' @return A data frame with:
+#'   * `day`
+#'   * `raw_count`
+#'   * `percentage_change`
+#'
 #' @export
 show_preprocessing <- function(raw_counts) {
-  if (!is.numeric(raw_counts)) stop("raw_counts must be numeric", call. = FALSE)
+  if (!is.numeric(raw_counts))
+    stop("raw_counts must be numeric")
 
-  python_code <- '
+  py_code <- '
 def show_preprocessing_temp(counts):
     import numpy as np
     counts = np.asarray(counts, dtype=float)
@@ -519,52 +388,47 @@ def show_preprocessing_temp(counts):
         0
     )
     return processed.tolist()
-'
-  tryCatch({
-    reticulate::py_run_string(python_code)
-    processed <- reticulate::py$show_preprocessing_temp(as.numeric(raw_counts))
-    out <- data.frame(
-      day = 0:(length(raw_counts) - 1),
-      raw_count = raw_counts,
-      percentage_change = round(processed, 4),
-      stringsAsFactors = FALSE
-    )
-    if (length(raw_counts) != 61) {
-      message("Note: For model predictions, you need exactly 61 days. Currently showing ",
-              length(raw_counts), " days.")
-    }
-    out
-  }, error = function(e) {
-    stop("Preprocessing demonstration failed: ", e$message, call. = FALSE)
-  })
-}
+  '
 
-#' Check model status
-#' @export
-check_model_status <- function() {
-  list(
-    loaded          = .bilstm_env$model_loaded,
-    model_directory = .bilstm_env$model_dir,
-    python_config   = tryCatch(utils::capture.output(reticulate::py_config()), error = function(e) NULL)
+  reticulate::py_run_string(py_code)
+  processed <- reticulate::py$show_preprocessing_temp(as.numeric(raw_counts))
+
+  data.frame(
+    day = seq_along(raw_counts) - 1,
+    raw_count = raw_counts,
+    percentage_change = round(processed, 4),
+    stringsAsFactors = FALSE
   )
 }
 
-#' Clean up model from memory
+#' Check model status
+#'
+#' @return A list describing model load status and Python config.
+#' @export
+check_model_status <- function() {
+  list(
+    loaded = .bilstm_env$model_loaded,
+    model_directory = .bilstm_env$model_dir,
+    python_config = tryCatch(
+      utils::capture.output(reticulate::py_config()),
+      error = function(e) NULL
+    )
+  )
+}
+
+#' Unload the model from memory
+#'
+#' @return Invisibly `TRUE` on success.
 #' @export
 cleanup_model <- function() {
   if (!.bilstm_env$model_loaded) {
-    message("No model currently loaded.")
+    message("No model loaded.")
     return(invisible(TRUE))
   }
-  ok <- TRUE
-  tryCatch({
-    reticulate::py$cleanup_model()
-  }, error = function(e) {
-    ok <<- FALSE
-    warning("Error during Python cleanup: ", e$message, call. = FALSE)
-  })
+
+  try(reticulate::py$cleanup_model(), silent = TRUE)
   .bilstm_env$model_loaded <- FALSE
-  .bilstm_env$model_dir    <- NULL
-  if (ok) message("Model cleaned up successfully.")
+  .bilstm_env$model_dir <- NULL
+  message("Model cleaned up.")
   invisible(TRUE)
 }
