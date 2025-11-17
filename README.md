@@ -1,6 +1,3 @@
-Here is a **GitHub-ready README.md** — concise, polished, and formatted exactly the way GitHub users expect.
-
----
 
 # epiworldRcalibrate
 
@@ -84,6 +81,4 @@ Full website, reference, and vignette:
 Developed by **Sima Najafzadehkhoei**
 🔗 [https://github.com/sima-njf](https://github.com/sima-njf)
 
----
 
-If you want, I can also add CI badges, pkgdown badges, code coverage badges, or a logo.
