@@ -1,60 +1,84 @@
 
 # epiworldRcalibrate
 
-> BiLSTM-based parameter calibration tools for SIR models built on the
-> epiworldR framework.
+### **Deep Learning Calibration for epiworldR (BiLSTM-Based)**
 
-------------------------------------------------------------------------
+**epiworldRcalibrate** provides fast, data-driven calibration of SIR epidemic parameters using a pretrained **Bidirectional LSTM (BiLSTM)** model.
+Given a single incidence time series, the package estimates:
 
-## 📦 Overview
+* **Transmission rate** (`ptran`)
+* **Contact rate** (`crate`)
+* **Basic reproduction number** (`R0`)
 
-`epiworldRcalibrate` provides fast, deep-learning-based calibration of
-SIR model parameters using a BiLSTM model implemented in PyTorch and
-accessed from R via the `reticulate` package. It allows users to load a
-trained neural network once and make many fast predictions during
-large-scale epidemiological simulations.
+The package is fully integrated with **epiworldR** and requires **no external Python setup**.
 
-------------------------------------------------------------------------
+---
 
-## 🔧 Features
+## 🚀 Features
 
-- ✅ Persistent BiLSTM model loading using PyTorch  
-- ✅ Predicts `ptran` (transmission probability), `crate` (contact
-  rate), and `R0`  
-- ✅ One-time initialization with support for cleanup  
-- ✅ Python–R bridge via `reticulate`  
-- ✅ Ready for use in batch simulations or parameter sweeps
+* **One-line calibration** via `calibrate_sir()`
+* **Automatic deep learning backend** (initialized on demand)
+* **Compatible with all epiworldR SIR simulations**
+* **Transparent preprocessing** via `show_preprocessing()`
+* **Designed for reproducible epidemic modeling workflows**
 
-------------------------------------------------------------------------
+---
 
-## 📁 Installation
+## 📦 Installation
 
-This package is currently not on CRAN. To install it from GitHub:
-
-``` r
-# install.packages("devtools")
+```r
+# Install from GitHub
 devtools::install_github("sima-njf/epiworldRcalibrate")
 ```
 
-``` r
+---
+
+## 🔧 Quick Example
+
+```r
+library(epiworldR)
 library(epiworldRcalibrate)
-library(reticulate)
-# Step 1: Load the model (do this once)
-init_bilstm_model("~/Desktop/epiworldRcalibrate_fixed/epiworldRcalibrate/inst/models")
+
+# simulate SIR model
+m <- ModelSIRCONN("sim", n=8000, prevalence=0.01,
+                  contact_rate=3, transmission_rate=0.25,
+                  recovery_rate=0.1)
+run(m, ndays = 60)
+
+inc <- plot_incidence(m)[,1]
+
+# one-line calibration
+calibrate_sir(
+  daily_cases = inc,
+  population_size = 8000,
+  recovery_rate = 0.1
+)
 ```
 
-    ## BiLSTM model loaded successfully!
+---
 
-    ## [1] TRUE
+## 🎯 What This Package Is For
 
-``` r
-# Step 2: Predict parameters
-set.seed(42)
-incidence <- abs(rnorm(61, mean = 100, sd = 20))
-params <- predict_sir_bilstm(incidence, n = 5000, recov = 0.1)
+Use **epiworldRcalibrate** when you want to:
 
-print(params)
-```
+* Extract SIR parameters **directly from simulated incidence curves**
+* Compare **ground-truth vs. calibrated** dynamics
+* Avoid heavy Bayesian/likelihood-based fitting
+* Teach or study calibration in infectious disease modeling
+* Perform **fast approximate inference** in simulation studies
 
-    ##      ptran      crate         R0 
-    ## 0.08728912 3.02057481 2.25915074
+---
+
+## 📘 Documentation
+
+Full website, reference, and vignette:
+👉 **[https://sima-njf.github.io/epiworldRcalibrate/](https://sima-njf.github.io/epiworldRcalibrate/)**
+
+---
+
+## 👤 Author
+
+Developed by **Sima Najafzadehkhoei**
+🔗 [https://github.com/sima-njf](https://github.com/sima-njf)
+
+
