@@ -16,6 +16,68 @@
 # Python bootstrap (private)
 # =============================================================================
 
+#' Find available Python installation
+#' @keywords internal
+.find_python <- function() {
+  # Check if user has set RETICULATE_PYTHON
+  user_py <- Sys.getenv("RETICULATE_PYTHON", unset = "")
+  if (nzchar(user_py) && file.exists(user_py)) {
+    return(user_py)
+  }
+
+  # Try to find Python using reticulate
+  py_config <- tryCatch(reticulate::py_config(), error = function(e) NULL)
+  if (!is.null(py_config) && !is.null(py_config$python)) {
+    return(py_config$python)
+  }
+
+  # Try common Python locations
+  if (.Platform$OS.type == "windows") {
+    candidates <- c(
+      "python.exe",
+      "python3.exe",
+      file.path(Sys.getenv("LOCALAPPDATA"), "Programs/Python/*/python.exe")
+    )
+  } else {
+    candidates <- c(
+      "/usr/bin/python3",
+      "/usr/local/bin/python3",
+      "/usr/bin/python",
+      "/usr/local/bin/python",
+      "/opt/homebrew/bin/python3",
+      paste0(Sys.getenv("HOME"), "/.pyenv/shims/python3")
+    )
+  }
+
+  for (py in candidates) {
+    if (file.exists(py)) {
+      return(py)
+    }
+    # Handle wildcards
+    if (grepl("\\*", py)) {
+      matches <- Sys.glob(py)
+      if (length(matches) > 0) {
+        return(matches[1])
+      }
+    }
+  }
+
+  # Try system command
+  py_path <- tryCatch({
+    if (.Platform$OS.type == "windows") {
+      system2("where", "python", stdout = TRUE, stderr = FALSE)[1]
+    } else {
+      system2("which", "python3", stdout = TRUE, stderr = FALSE)[1]
+    }
+  }, error = function(e) NULL)
+
+  if (!is.null(py_path) && nzchar(py_path) && file.exists(py_path)) {
+    return(py_path)
+  }
+
+  return(NULL)
+}
+
 #' Ensure Python is usable and required modules are present.
 #' - Respects RETICULATE_PYTHON if the user has set it.
 #' - Otherwise creates/uses a private virtualenv 'epiworldRcalibrate'
@@ -24,20 +86,67 @@
 .ensure_python_ready <- function() {
   # If the user pinned a Python, respect it.
   user_py <- Sys.getenv("RETICULATE_PYTHON", unset = "")
+
   if (nzchar(user_py)) {
-    try(reticulate::use_python(user_py, required = FALSE), silent = TRUE)
+    # User has specified Python, use it directly
+    message("Using user-specified Python: ", user_py)
+    tryCatch({
+      reticulate::use_python(user_py, required = TRUE)
+    }, error = function(e) {
+      stop("Failed to use specified Python at: ", user_py, "\n", e$message, call. = FALSE)
+    })
   } else {
+    # Try to use virtual environment
     vname <- .bilstm_env$venv_name
 
-    # Does our private env exist?
+    # Check if virtualenv already exists
     envs <- tryCatch(reticulate::virtualenv_list(), error = function(e) character())
-    if (!(vname %in% envs)) {
-      message("Creating private Python env '", vname, "'...")
-      reticulate::virtualenv_create(envname = vname, python = NULL)
-    }
 
-    # Activate it for this session
-    reticulate::use_virtualenv(virtualenv = vname, required = FALSE)
+    if (vname %in% envs) {
+      # Virtualenv exists, use it
+      message("Using existing virtual environment: ", vname)
+      reticulate::use_virtualenv(virtualenv = vname, required = FALSE)
+    } else {
+      # Need to create virtualenv - first find Python
+      python_path <- .find_python()
+
+      if (is.null(python_path)) {
+        stop(
+          "Could not find Python installation. Please either:\n",
+          "  1. Install Python 3.7+ from python.org, or\n",
+          "  2. Set RETICULATE_PYTHON environment variable to your Python executable path\n",
+          "Example: Sys.setenv(RETICULATE_PYTHON = '/usr/bin/python3')",
+          call. = FALSE
+        )
+      }
+
+      message("Found Python at: ", python_path)
+      message("Creating virtual environment '", vname, "'...")
+
+      tryCatch({
+        reticulate::virtualenv_create(envname = vname, python = python_path)
+        message("Virtual environment created successfully")
+      }, error = function(e) {
+        stop(
+          "Failed to create virtual environment. Error: ", e$message, "\n",
+          "Try manually creating it with:\n",
+          "  reticulate::virtualenv_create('", vname, "', python = '", python_path, "')",
+          call. = FALSE
+        )
+      })
+
+      # Now use the newly created environment
+      reticulate::use_virtualenv(virtualenv = vname, required = FALSE)
+    }
+  }
+
+  # Ensure Python is available
+  if (!reticulate::py_available(initialize = TRUE)) {
+    stop(
+      "Could not initialize Python. ",
+      "Please install Python 3.7+ or set RETICULATE_PYTHON environment variable.",
+      call. = FALSE
+    )
   }
 
   # Now ensure required modules are present
@@ -54,44 +163,46 @@
     pkgs_to_install[pkgs_to_install == "sklearn"] <- "scikit-learn"
 
     message("Installing missing Python packages: ", paste(pkgs_to_install, collapse = ", "))
+    message("This may take a few minutes...")
+
+    # Determine environment name for installation
+    env_for_install <- if (nzchar(Sys.getenv("RETICULATE_PYTHON", unset = ""))) {
+      NULL  # Install to system Python
+    } else {
+      .bilstm_env$venv_name  # Install to virtualenv
+    }
 
     # Install numpy/scikit-learn/joblib first if torch is also missing
     base_pkgs <- setdiff(pkgs_to_install, "torch")
     if (length(base_pkgs)) {
       tryCatch({
-        reticulate::py_install(base_pkgs, envname = .bilstm_env$venv_name, pip = TRUE)
+        reticulate::py_install(base_pkgs, envname = env_for_install, pip = TRUE)
+        message("Successfully installed: ", paste(base_pkgs, collapse = ", "))
       }, error = function(e) {
         stop("Failed to install Python packages: ", e$message, call. = FALSE)
       })
     }
 
     if ("torch" %in% pkgs_to_install) {
+      message("Installing PyTorch (CPU version)...")
       # Prefer CPU wheels; fall back to default index if that fails
       ok <- TRUE
       tryCatch({
         reticulate::py_install(
           packages    = "torch",
-          envname     = .bilstm_env$venv_name,
+          envname     = env_for_install,
           pip         = TRUE,
           pip_options = c("--index-url", "https://download.pytorch.org/whl/cpu")
         )
+        message("PyTorch installed successfully")
       }, error = function(e) {
         ok <<- FALSE
         warning("Failed to install torch from CPU index, trying default...")
       })
       if (!ok) {
-        reticulate::py_install("torch", envname = .bilstm_env$venv_name, pip = TRUE)
+        reticulate::py_install("torch", envname = env_for_install, pip = TRUE)
       }
     }
-  }
-
-  # Final sanity check
-  if (!reticulate::py_available(initialize = TRUE)) {
-    stop(
-      "Could not initialize Python. ",
-      "If you have a system Python, set RETICULATE_PYTHON to it and retry.",
-      call. = FALSE
-    )
   }
 
   # Verify critical modules are now available
@@ -105,6 +216,8 @@
       call. = FALSE
     )
   }
+
+  message("Python environment ready with all required packages")
 }
 
 # =============================================================================
