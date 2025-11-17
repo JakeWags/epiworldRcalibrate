@@ -269,7 +269,7 @@ recovery     <- 1/7             # 7-day infectious period
 
 # One line:
 params <- calibrate_sir(my_incidence, population, recovery)
-print(params)  # named vector: ptran, crate, R0
+print(params) # named vector: ptran, crate, R0
 ```
 
 ### Notes
