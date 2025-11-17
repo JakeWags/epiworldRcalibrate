@@ -272,7 +272,3 @@ params <- calibrate_sir(my_incidence, population, recovery)
 print(params) # named vector: ptran, crate, R0
 ```
 
-### Notes
-
-* If the required Python packages are missing, `calibrate_sir()` will attempt to set up a private Python environment and install them (internet required). If installation isn’t permitted by your system, the function will return a clear error with instructions.
-* Model assets are bundled with the package; no paths need to be provided for common use.

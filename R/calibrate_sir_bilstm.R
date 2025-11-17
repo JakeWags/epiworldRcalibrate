@@ -19,7 +19,7 @@
 #' Ensure Python is usable and required modules are present.
 #' - Respects RETICULATE_PYTHON if the user has set it.
 #' - Otherwise creates/uses a private virtualenv 'epiworldRcalibrate'
-#' - Installs numpy, joblib, torch (CPU) if missing.
+#' - Installs numpy, scikit-learn, joblib, torch (CPU) if missing.
 #' @keywords internal
 .ensure_python_ready <- function() {
   # If the user pinned a Python, respect it.
@@ -43,21 +43,29 @@
   # Now ensure required modules are present
   needs <- c(
     numpy = !reticulate::py_module_available("numpy"),
+    sklearn = !reticulate::py_module_available("sklearn"),
     joblib = !reticulate::py_module_available("joblib"),
     torch  = !reticulate::py_module_available("torch")
   )
 
   if (any(needs)) {
-    pkgs <- names(needs)[needs]
-    message("Installing missing Python packages: ", paste(pkgs, collapse = ", "))
+    pkgs_to_install <- names(needs)[needs]
+    # Map sklearn to scikit-learn for pip
+    pkgs_to_install[pkgs_to_install == "sklearn"] <- "scikit-learn"
 
-    # Install numpy/joblib first if torch is also missing
-    base_pkgs <- setdiff(pkgs, "torch")
+    message("Installing missing Python packages: ", paste(pkgs_to_install, collapse = ", "))
+
+    # Install numpy/scikit-learn/joblib first if torch is also missing
+    base_pkgs <- setdiff(pkgs_to_install, "torch")
     if (length(base_pkgs)) {
-      reticulate::py_install(base_pkgs, envname = .bilstm_env$venv_name, pip = TRUE)
+      tryCatch({
+        reticulate::py_install(base_pkgs, envname = .bilstm_env$venv_name, pip = TRUE)
+      }, error = function(e) {
+        stop("Failed to install Python packages: ", e$message, call. = FALSE)
+      })
     }
 
-    if ("torch" %in% pkgs) {
+    if ("torch" %in% pkgs_to_install) {
       # Prefer CPU wheels; fall back to default index if that fails
       ok <- TRUE
       tryCatch({
@@ -67,7 +75,10 @@
           pip         = TRUE,
           pip_options = c("--index-url", "https://download.pytorch.org/whl/cpu")
         )
-      }, error = function(e) ok <<- FALSE)
+      }, error = function(e) {
+        ok <<- FALSE
+        warning("Failed to install torch from CPU index, trying default...")
+      })
       if (!ok) {
         reticulate::py_install("torch", envname = .bilstm_env$venv_name, pip = TRUE)
       }
@@ -79,6 +90,18 @@
     stop(
       "Could not initialize Python. ",
       "If you have a system Python, set RETICULATE_PYTHON to it and retry.",
+      call. = FALSE
+    )
+  }
+
+  # Verify critical modules are now available
+  critical_modules <- c("numpy", "sklearn", "joblib", "torch")
+  missing_after_install <- critical_modules[!sapply(critical_modules, reticulate::py_module_available)]
+  if (length(missing_after_install) > 0) {
+    stop(
+      "Failed to load required Python modules after installation: ",
+      paste(missing_after_install, collapse = ", "),
+      "\nTry manually installing with: reticulate::py_install(c('numpy', 'scikit-learn', 'joblib', 'torch'))",
       call. = FALSE
     )
   }
