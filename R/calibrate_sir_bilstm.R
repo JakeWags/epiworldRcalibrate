@@ -312,15 +312,14 @@ init_bilstm_model <- function(model_dir = NULL, force_reload = FALSE) {
 
 #' Estimate SIR Parameters from 61-day incidence
 #'
-#' @param daily_cases Numeric vector of length 61 with daily incidence
-#'   counts (days 0–60).
-#' @param population_size Total population size (single numeric).
-#' @param recovery_rate Recovery rate parameter (single numeric).
+#' @param daily_cases Numeric vector of length 61 containing daily incidence
+#'   counts for days 0 to 60.
+#' @param population_size Single numeric value giving the total population size
+#'   used in the SIR model.
+#' @param recovery_rate Single numeric value giving the recovery rate parameter
+#'   of the SIR model.
 #'
-#' @return A named numeric vector with:
-#'   * `ptran` – transmission probability
-#'   * `crate` – contact rate
-#'   * `R0` – basic reproduction number
+#' @return Named numeric vector: `ptran`, `crate`, `R0`.
 #' @export
 estimate_sir_parameters <- function(daily_cases, population_size, recovery_rate) {
   if (!.bilstm_env$model_loaded)
@@ -337,13 +336,20 @@ estimate_sir_parameters <- function(daily_cases, population_size, recovery_rate)
   out
 }
 
-#' Calibrate SIR Parameters (convenience wrapper)
+#' Calibrate SIR Parameters (one-step)
 #'
-#' @param daily_cases Numeric vector of length 61.
-#' @param population_size Population size.
-#' @param recovery_rate Recovery rate.
-#' @param model_dir Optional model directory path.
-#' @param auto_init Logical; automatically initialize model if needed.
+#' This is a convenience wrapper that optionally initializes the BiLSTM model
+#' and then calls [estimate_sir_parameters()] on the provided data.
+#'
+#' @param daily_cases Numeric vector of length 61 containing daily incidence
+#'   counts (day 0 to day 60).
+#' @param population_size Single numeric value giving the total population size.
+#' @param recovery_rate Single numeric value giving the recovery rate parameter.
+#' @param model_dir Optional path to the directory containing the trained
+#'   BiLSTM model and scaler files. If `NULL`, the package's bundled assets
+#'   are used.
+#' @param auto_init Logical; if `TRUE` (default), automatically calls
+#'   [init_bilstm_model()] when the model is not yet loaded.
 #'
 #' @return Named numeric vector: `ptran`, `crate`, `R0`.
 #' @export
@@ -363,15 +369,11 @@ calibrate_sir <- function(daily_cases,
 # Utilities
 # =============================================================================
 
-#' Show preprocessing transformation on incidence data
+#' Demonstrate preprocessing (not required for prediction)
 #'
 #' @param raw_counts Numeric vector of raw daily incidence counts.
 #'
-#' @return A data frame with:
-#'   * `day`
-#'   * `raw_count`
-#'   * `percentage_change`
-#'
+#' @return A data frame with columns `day`, `raw_count`, and `percentage_change`.
 #' @export
 show_preprocessing <- function(raw_counts) {
   if (!is.numeric(raw_counts))

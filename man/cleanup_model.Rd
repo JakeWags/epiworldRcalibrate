@@ -2,10 +2,13 @@
 % Please edit documentation in R/calibrate_sir_bilstm.R
 \name{cleanup_model}
 \alias{cleanup_model}
-\title{Clean up model from memory}
+\title{Unload the model from memory}
 \usage{
 cleanup_model()
 }
+\value{
+Invisibly \code{TRUE} on success.
+}
 \description{
-Clean up model from memory
+Unload the model from memory
 }

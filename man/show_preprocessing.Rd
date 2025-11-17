@@ -6,6 +6,12 @@
 \usage{
 show_preprocessing(raw_counts)
 }
+\arguments{
+\item{raw_counts}{Numeric vector of raw daily incidence counts.}
+}
+\value{
+A data frame with columns \code{day}, \code{raw_count}, and \code{percentage_change}.
+}
 \description{
 Demonstrate preprocessing (not required for prediction)
 }

@@ -12,6 +12,25 @@ calibrate_sir(
   auto_init = TRUE
 )
 }
+\arguments{
+\item{daily_cases}{Numeric vector of length 61 containing daily incidence
+counts (day 0 to day 60).}
+
+\item{population_size}{Single numeric value giving the total population size.}
+
+\item{recovery_rate}{Single numeric value giving the recovery rate parameter.}
+
+\item{model_dir}{Optional path to the directory containing the trained
+BiLSTM model and scaler files. If \code{NULL}, the package's bundled assets
+are used.}
+
+\item{auto_init}{Logical; if \code{TRUE} (default), automatically calls
+\code{\link[=init_bilstm_model]{init_bilstm_model()}} when the model is not yet loaded.}
+}
+\value{
+Named numeric vector: \code{ptran}, \code{crate}, \code{R0}.
+}
 \description{
-Calibrate SIR Parameters (one-step)
+This is a convenience wrapper that optionally initializes the BiLSTM model
+and then calls \code{\link[=estimate_sir_parameters]{estimate_sir_parameters()}} on the provided data.
 }

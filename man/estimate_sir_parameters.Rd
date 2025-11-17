@@ -6,8 +6,18 @@
 \usage{
 estimate_sir_parameters(daily_cases, population_size, recovery_rate)
 }
+\arguments{
+\item{daily_cases}{Numeric vector of length 61 containing daily incidence
+counts for days 0 to 60.}
+
+\item{population_size}{Single numeric value giving the total population size
+used in the SIR model.}
+
+\item{recovery_rate}{Single numeric value giving the recovery rate parameter
+of the SIR model.}
+}
 \value{
-named numeric vector: ptran, crate, R0
+Named numeric vector: \code{ptran}, \code{crate}, \code{R0}.
 }
 \description{
 Estimate SIR Parameters from 61-day incidence

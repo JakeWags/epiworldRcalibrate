@@ -8,6 +8,15 @@
 \description{
 Provides functions for calibration using Long-short term memory (LSTM). The package includes the pre-treined model which can be used directly on your data to do the calibration.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://sima-njf.github.io/epiworldRcalibrate/}
+  \item \url{https://github.com/sima-njf/epiworldRcalibrate}
+  \item Report bugs at \url{https://github.com/sima-njf/epiworldRcalibrate/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: George Vega Yon \email{g.vegayon@gmail.com} (\href{https://orcid.org/0000-0002-3171-0844}{ORCID})
 

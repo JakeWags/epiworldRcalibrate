@@ -6,6 +6,9 @@
 \usage{
 check_model_status()
 }
+\value{
+A list describing model load status and Python config.
+}
 \description{
 Check model status
 }

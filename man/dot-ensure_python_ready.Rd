@@ -2,21 +2,11 @@
 % Please edit documentation in R/calibrate_sir_bilstm.R
 \name{.ensure_python_ready}
 \alias{.ensure_python_ready}
-\title{Ensure Python is usable and required modules are present.
-\itemize{
-\item Respects RETICULATE_PYTHON if the user has set it.
-\item Otherwise creates/uses a private virtualenv 'epiworldRcalibrate'
-\item Installs numpy, joblib, torch (CPU) if missing.
-}}
+\title{Ensure Python + necessary modules are ready}
 \usage{
 .ensure_python_ready()
 }
 \description{
-Ensure Python is usable and required modules are present.
-\itemize{
-\item Respects RETICULATE_PYTHON if the user has set it.
-\item Otherwise creates/uses a private virtualenv 'epiworldRcalibrate'
-\item Installs numpy, joblib, torch (CPU) if missing.
-}
+Ensure Python + necessary modules are ready
 }
 \keyword{internal}

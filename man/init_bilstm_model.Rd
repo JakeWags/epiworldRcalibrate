@@ -7,12 +7,13 @@
 init_bilstm_model(model_dir = NULL, force_reload = FALSE)
 }
 \arguments{
-\item{model_dir}{Optional path to directory with model files.}
+\item{model_dir}{Optional path to model directory. Defaults to the
+package's bundled model files.}
 
-\item{force_reload}{Force reload even if already loaded.}
+\item{force_reload}{Logical; reload even if already loaded.}
 }
 \value{
-(invisible) TRUE on success
+Invisibly returns \code{TRUE} on success.
 }
 \description{
 Initialize BiLSTM Model for SIR Parameter Estimation
