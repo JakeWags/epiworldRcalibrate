@@ -13,7 +13,7 @@ bibentry(
 
 bibentry(
   bibtype  = "Article",
-  title    = "BiLSTM Model for Calibration of SIR Epidemic Parameters",
+  title    = "Machine Generalize Learning in Agent-Based Models: Going Beyond Surrogate Models for Calibration in ABMs",
   author   = c(
     person("Sima", "Najafzadehkhoei"),
     person("George", "Vega Yon"),
