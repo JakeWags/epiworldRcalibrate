@@ -117,7 +117,7 @@ cat("Mean daily cases:", round(mean(incidence), 1), "\n")
 ### Configuration
 
 ```{r config}
-N     <- 50000      # Population size
+N     <- 5000      # Population size
 recov <- 1 / 7     # Recovery rate (7-day infectious period)
 model_ndays <- 60  # Simulation days
 ```
@@ -271,7 +271,7 @@ dummy_model <- ModelSIRCONN(
   name              = "dummy",
   n                 = as.integer(N),
   prevalence        = 0.1,
-  contact_rate      = 6.0,
+  contact_rate      = 5.0,
   transmission_rate = 0.1,
   recovery_rate     = 0.1
 )
@@ -288,8 +288,8 @@ lfmcmc_obj <- set_kernel_fun(lfmcmc_obj, kernel_fun)
 lfmcmc_obj <- set_observed_data(lfmcmc_obj, incidence_vec)
 
 init_params <- c(5, 1/7, 0.0571)
-n_samples_calib <- 2000
-burnin <- 1000
+n_samples_calib <- 1000
+burnin <- 500
 epsilon <- sqrt(sum(incidence_vec^2)) * 0.05
 
 cat("Running LFMCMC with", n_samples_calib, "samples (50% burn-in)...\n")
