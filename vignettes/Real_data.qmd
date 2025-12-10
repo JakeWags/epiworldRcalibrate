@@ -385,11 +385,7 @@ The model achieved **`r round(coverage$coverage_rate, 1)`%** coverage with a 95%
 ### Future Directions
 
 -   Incorporate time-varying parameters to model interventions (lockdowns, mask mandates)
--   Add age or risk stratification for heterogeneous populations
 -   Extend to SEIR model including exposed (latent) compartment
--   Include spatial structure for regional forecasting
--   Compare calibration performance with alternative methods (ABC, particle filters, MCMC)
--   Validate on out-of-sample data for true forecasting assessment
 
 ## Conclusion
 

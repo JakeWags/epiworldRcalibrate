@@ -9,7 +9,6 @@ on:
     types: [published]
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN
 permissions:
   contents: read
   pages: write
@@ -17,8 +16,6 @@ permissions:
   pull-requests: write
   actions: read
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
 concurrency:
   group: "pages"
   cancel-in-progress: false
@@ -63,11 +60,15 @@ jobs:
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install numpy joblib scikit-learn
 
-      # ⭐ CRITICAL FIX ⭐
-      # Prevent reticulate from using uv automatic Python
-      # and force it to use THIS Python everywhere (including pkgdown)
+      # ⭐ Ensure reticulate uses THIS Python
       - name: Set RETICULATE_PYTHON
         run: echo "RETICULATE_PYTHON=$(which python)" >> $GITHUB_ENV
+
+      # ---------------------------------------------------------
+      # 3.5 Install the epiworldRcalibrate package itself  ✅
+      # ---------------------------------------------------------
+      - name: Install epiworldRcalibrate
+        run: R CMD INSTALL .
 
       # ---------------------------------------------------------
       # 4. Build pkgdown website
