@@ -33,6 +33,10 @@ jobs:
       # 1.5 Install Quarto
       # ---------------------------------------------------------
       - uses: quarto-dev/quarto-actions/setup@v2
+
+      # Verify Quarto installation
+      - name: Check Quarto version
+        run: quarto --version
       # ---------------------------------------------------------
       # 2. Install R package dependencies
       # ---------------------------------------------------------
@@ -41,6 +45,8 @@ jobs:
           extra-packages: |
             any::pkgdown
             any::reticulate
+            any::knitr
+            any::rmarkdown
           needs: website
       # ---------------------------------------------------------
       # 3. Install Python for reticulate
@@ -52,7 +58,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install numpy joblib scikit-learn
+          python -m pip install numpy joblib scikit-learn matplotlib
       - name: Set RETICULATE_PYTHON
         run: echo "RETICULATE_PYTHON=$(which python)" >> $GITHUB_ENV
       # ---------------------------------------------------------
@@ -60,6 +66,13 @@ jobs:
       # ---------------------------------------------------------
       - name: Install epiworldRcalibrate
         run: R CMD INSTALL .
+
+      # Test render one vignette manually to see the error
+      - name: Test Quarto render
+        run: |
+          cd vignettes
+          quarto render calibration_explanation.qmd --to html
+        continue-on-error: true
       # ---------------------------------------------------------
       # 4. Build pkgdown website
       # ---------------------------------------------------------
