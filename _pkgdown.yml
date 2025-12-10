@@ -21,13 +21,15 @@ home:
 authors:
   sima-njf:
     href: "https://github.com/sima-njf"
-
 articles:
   - title: "Getting Started"
     navbar: ~
     contents:
       - calibration_explanation
-
+  - title: "Advanced Topics"
+    contents:
+      - ABC_LSTM
+      - Real_data
 footer:
   structure:
     left: [developed_by, built_with]
