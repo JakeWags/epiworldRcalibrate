@@ -65,7 +65,20 @@ jobs:
       - name: Install epiworldRcalibrate
         run: R CMD INSTALL .
       # ---------------------------------------------------------
-      # 4. Build pkgdown website with verbose output
+      # Test render vignettes individually to see errors
+      # ---------------------------------------------------------
+      - name: Test render each vignette
+        run: |
+          cd vignettes
+          echo "=== Rendering calibration_explanation.qmd ==="
+          quarto render calibration_explanation.qmd --to html || true
+          echo "=== Rendering ABC_LSTM.qmd ==="
+          quarto render ABC_LSTM.qmd --to html || true
+          echo "=== Rendering Real_data.qmd ==="
+          quarto render Real_data.qmd --to html || true
+        continue-on-error: true
+      # ---------------------------------------------------------
+      # 4. Build pkgdown website
       # ---------------------------------------------------------
       - name: Build pkgdown site
         run: |

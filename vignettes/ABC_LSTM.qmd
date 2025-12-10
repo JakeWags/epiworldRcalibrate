@@ -117,7 +117,7 @@ cat("Mean daily cases:", round(mean(incidence), 1), "\n")
 ### Configuration
 
 ```{r config}
-N     <- 5000      # Population size
+N     <- 50000      # Population size
 recov <- 1 / 7     # Recovery rate (7-day infectious period)
 model_ndays <- 60  # Simulation days
 ```
