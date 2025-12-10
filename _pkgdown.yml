@@ -10,6 +10,14 @@ navbar:
   left:
     - text: "Get Started"
       href: articles/calibration_explanation.html
+    - text: "Articles"
+      menu:
+        - text: "Introduction to Calibration"
+          href: articles/calibration_explanation.html
+        - text: "BiLSTM vs ABC Comparison"
+          href: articles/ABC_LSTM.html
+        - text: "Real Data Example"
+          href: articles/Real_data.html
     - text: "Reference"
       href: reference/index.html
   right:
@@ -30,6 +38,10 @@ articles:
     navbar: ~
     contents:
       - calibration_explanation
+  - title: "Advanced Examples"
+    contents:
+      - ABC_LSTM
+      - Real_data
 
 footer:
   structure:
