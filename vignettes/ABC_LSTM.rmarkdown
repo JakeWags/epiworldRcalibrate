@@ -564,3 +564,10 @@ metrics_df <- data.frame(
 knitr::kable(metrics_df, 
              caption = "Model Performance Comparison")
 ```
+
+## Session Information
+
+```{r session-info}
+sessionInfo()
+```
+

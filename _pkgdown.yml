@@ -1,35 +1,114 @@
-template:
-  bootstrap: 5
-url: https://sima-njf.github.io/epiworldRcalibrate/
-navbar:
-  title: "epiworldRcalibrate"
-  left:
-    - text: "Get Started"
-      href: articles/calibration_explanation.html
-    - text: "Reference"
-      href: reference/index.html
-  right:
-    - icon: fab fa-github
-      href: "https://github.com/sima-njf/epiworldRcalibrate"
-      aria-label: "GitHub"
-home:
-  title: "BiLSTM Parameter Calibration for epiworldR"
-  description: "Fast, deep-learning-based calibration of SIR model parameters using BiLSTM neural networks"
-authors:
-  sima-njf:
-    href: "https://github.com/sima-njf"
-articles:
-  - title: "Getting Started"
-    navbar: ~
-    contents:
-      - calibration_explanation
-      - ABC_LSTM
-      - Real_data
-footer:
-  structure:
-    left: [developed_by, built_with]
-    right: [package]
-  components:
-    developed_by: "Developed by [Sima Najafzadehkhoei](https://github.com/sima-njf)"
-    built_with: "Built with [pkgdown](https://pkgdown.r-lib.org/)"
-    package: "epiworldRcalibrate"
+name: pkgdown
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  release:
+    types: [published]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  pull-requests: write
+  actions: read
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      # ---------------------------------------------------------
+      # 1. Install R
+      # ---------------------------------------------------------
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      # ---------------------------------------------------------
+      # 1.5 Install Quarto
+      # ---------------------------------------------------------
+      - uses: quarto-dev/quarto-actions/setup@v2
+      # ---------------------------------------------------------
+      # 2. Install R package dependencies
+      # ---------------------------------------------------------
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: |
+            any::pkgdown
+            any::reticulate
+            any::knitr
+            any::rmarkdown
+          needs: website
+      # ---------------------------------------------------------
+      # 3. Install Python for reticulate
+      # ---------------------------------------------------------
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python dependencies for model + vignette
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install numpy joblib scikit-learn matplotlib pandas
+      - name: Set RETICULATE_PYTHON globally
+        run: |
+          echo "RETICULATE_PYTHON=$(which python)" >> $GITHUB_ENV
+          echo "RETICULATE_PYTHON_ENV=$(which python)" >> $GITHUB_ENV
+      # ---------------------------------------------------------
+      # Install the package before pkgdown
+      # ---------------------------------------------------------
+      - name: Install epiworldRcalibrate
+        run: R CMD INSTALL .
+      # ---------------------------------------------------------
+      # 4. Build pkgdown website with VERBOSE output
+      # ---------------------------------------------------------
+      - name: Build pkgdown site
+        run: |
+          Rscript -e '
+            Sys.setenv(RETICULATE_PYTHON = Sys.which("python"))
+            pkgdown::build_articles(quiet = FALSE)
+          '
+        continue-on-error: true
+
+      - name: Build full site if articles succeeded
+        run: |
+          Rscript -e '
+            Sys.setenv(RETICULATE_PYTHON = Sys.which("python"))
+            pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)
+          '
+      # Upload artifact for GitHub Pages deployment
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      # Upload artifact for PR preview
+      - name: Upload PR artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkgdown-site
+          path: docs
+      - name: Post artifact link to PR
+        if: github.event_name == 'pull_request'
+        uses: CDCgov/cfa-actions/post-artifact@v1.2.0
+        with:
+          artifact-name: pkgdown-site
+          gh-token: ${{ secrets.GITHUB_TOKEN }}
+          message: 'Thank you for your contribution @${{ github.actor }} 🚀! The pkgdown site preview is ready for review 👉 [Download here]({ artifact-url }) 👈!'
+  deploy:
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
