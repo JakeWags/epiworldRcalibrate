@@ -1,4 +1,5 @@
-pkgdown:
+name: pkgdown
+on:
   push:
     branches: [main, master]
   pull_request:
@@ -29,11 +30,11 @@ jobs:
         with:
           use-public-rspm: true
       # ---------------------------------------------------------
-      # 1.5 Install Quarto (NEW STEP)
+      # 1.5 Install Quarto
       # ---------------------------------------------------------
       - uses: quarto-dev/quarto-actions/setup@v2
         with:
-          version: "1.4.550"  # or use 'release' for latest
+          version: "1.4.550"
       # ---------------------------------------------------------
       # 2. Install R package dependencies
       # ---------------------------------------------------------
@@ -57,12 +58,12 @@ jobs:
       - name: Set RETICULATE_PYTHON
         run: echo "RETICULATE_PYTHON=$(which python)" >> $GITHUB_ENV
       # ---------------------------------------------------------
-      # ⭐ CRITICAL FIX ⭐ Install the package before pkgdown
+      # Install the package before pkgdown
       # ---------------------------------------------------------
       - name: Install epiworldRcalibrate
         run: R CMD INSTALL .
       # ---------------------------------------------------------
-      # 4. Build pkgdown website (fixed)
+      # 4. Build pkgdown website
       # ---------------------------------------------------------
       - name: Build pkgdown site
         run: Rscript -e 'pkgdown::build_site_github_pages(new_process = TRUE, install = TRUE)'
