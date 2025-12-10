@@ -60,30 +60,31 @@ jobs:
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install numpy joblib scikit-learn
 
-      # ⭐ Ensure reticulate uses THIS Python
       - name: Set RETICULATE_PYTHON
         run: echo "RETICULATE_PYTHON=$(which python)" >> $GITHUB_ENV
 
       # ---------------------------------------------------------
-      # 3.5 Install the epiworldRcalibrate package itself  ✅
+      # ⭐ CRITICAL FIX ⭐ Install the package before pkgdown
       # ---------------------------------------------------------
       - name: Install epiworldRcalibrate
         run: R CMD INSTALL .
 
       # ---------------------------------------------------------
-      # 4. Build pkgdown website
+      # 4. Build pkgdown website (fixed)
       # ---------------------------------------------------------
+      # new_process = TRUE → R session inherits installed package & reticulate Python
+      # install = TRUE → pkgdown installs package into site library for reference docs
       - name: Build pkgdown site
-        run: Rscript -e 'pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)'
+        run: Rscript -e 'pkgdown::build_site_github_pages(new_process = TRUE, install = TRUE)'
 
-      # Upload artifact for GitHub Pages deployment (only for pushes to main/master)
+      # Upload artifact for GitHub Pages deployment
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs
 
-      # Upload artifact for PR preview (only for pull requests)
+      # Upload artifact for PR preview
       - name: Upload PR artifact
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
@@ -91,16 +92,14 @@ jobs:
           name: pkgdown-site
           path: docs
 
-      # Post comment with link to artifact on PRs
       - name: Post artifact link to PR
         if: github.event_name == 'pull_request'
         uses: CDCgov/cfa-actions/post-artifact@v1.2.0
         with:
           artifact-name: pkgdown-site
           gh-token: ${{ secrets.GITHUB_TOKEN }}
-          message: 'Thank you for your contribution @${{ github.actor }} :rocket:! The pkgdown site preview is ready for review :point_right: [Download here]({ artifact-url }) :point_left:!'
+          message: 'Thank you for your contribution @${{ github.actor }} 🚀! The pkgdown site preview is ready for review 👉 [Download here]({ artifact-url }) 👈!'
 
-  # Deployment job - only runs on pushes to main/master
   deploy:
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     environment:
