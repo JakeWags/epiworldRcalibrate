@@ -1,8 +1,6 @@
 template:
   bootstrap: 5
-
 url: https://sima-njf.github.io/epiworldRcalibrate/
-
 navbar:
   title: "epiworldRcalibrate"
   left:
@@ -13,11 +11,10 @@ navbar:
   right:
     - icon: fab fa-github
       href: "https://github.com/sima-njf/epiworldRcalibrate"
-
+      aria-label: "GitHub"
 home:
   title: "BiLSTM Parameter Calibration for epiworldR"
   description: "Fast, deep-learning-based calibration of SIR model parameters using BiLSTM neural networks"
-
 authors:
   sima-njf:
     href: "https://github.com/sima-njf"
@@ -26,8 +23,6 @@ articles:
     navbar: ~
     contents:
       - calibration_explanation
-  - title: "Advanced Topics"
-    contents:
       - ABC_LSTM
       - Real_data
 footer:
