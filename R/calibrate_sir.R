@@ -125,101 +125,97 @@ import torch
 import torch.nn as nn
 import joblib
 import numpy as np
+import warnings
+from sklearn.preprocessing import MinMaxScaler
+
+# Suppress sklearn version warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
 _model = None
-_scaler_additional = None
-_scaler_targets = None
+_scaler_add = None
+_scaler_tgt = None
+_scaler_inc = None
 _device = torch.device("cpu")
+
+INCIDENCE_MIN = 0
+INCIDENCE_MAX = 10000
 
 class BiLSTMModel(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers, additional_dim, output_dim, dropout):
         super().__init__()
-        self.bilstm = nn.LSTM(
-            input_size=input_dim,
-            hidden_size=hidden_dim,
-            num_layers=num_layers,
-            batch_first=True,
-            dropout=dropout,
-            bidirectional=True,
-        )
+        self.bilstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True,
+                              dropout=dropout, bidirectional=True)
         self.fc1 = nn.Linear(2 * hidden_dim + additional_dim, 64)
         self.fc2 = nn.Linear(64, output_dim)
         self.sigmoid = nn.Sigmoid()
         self.softplus = nn.Softplus()
 
-    def forward(self, x, add_inputs):
+    def forward(self, x, additional_inputs):
         _, (h_n, _) = self.bilstm(x)
-        h = torch.cat((h_n[-2], h_n[-1]), dim=1)
-        h = torch.relu(self.fc1(torch.cat((h, add_inputs), dim=1)))
-        out = self.fc2(h)
-        out = torch.stack([
+        hid = torch.cat((h_n[-2], h_n[-1]), dim=1)
+        combined = torch.cat((hid, additional_inputs), dim=1)
+        x = torch.relu(self.fc1(combined))
+        out = self.fc2(x)
+        return torch.stack([
             self.sigmoid(out[:, 0]),
             self.softplus(out[:, 1]),
-            self.softplus(out[:, 2]),
+            self.softplus(out[:, 2])
         ], dim=1)
-        return out
 
-def preprocess_incidence_data(raw_counts):
-    raw_counts = np.asarray(raw_counts, dtype=float)
-    percentage_changes = np.zeros_like(raw_counts)
-    percentage_changes[1:] = np.where(
-        raw_counts[:-1] != 0,
-        (raw_counts[1:] - raw_counts[:-1]) / raw_counts[:-1],
-        0
-    )
-    return percentage_changes
+def create_fixed_incidence_scaler(shape):
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaler.data_min_ = np.zeros(shape)
+    scaler.data_max_ = np.ones(shape) * INCIDENCE_MAX
+    scaler.data_range_ = scaler.data_max_ - scaler.data_min_
+    scaler.scale_ = 1.0 / scaler.data_range_
+    scaler.min_ = 0 - scaler.data_min_ * scaler.scale_
+    return scaler
 
-def load_model_components(model_path, scaler_add_path, scaler_tgt_path):
-    global _model, _scaler_additional, _scaler_targets
+def load_model_components(model_path, scaler_add_path, scaler_tgt_path, scaler_inc_path=None):
+    global _model, _scaler_add, _scaler_tgt, _scaler_inc
 
-    _scaler_additional = joblib.load(scaler_add_path)
-    _scaler_targets = joblib.load(scaler_tgt_path)
+    _scaler_add = joblib.load(scaler_add_path)
+    _scaler_tgt = joblib.load(scaler_tgt_path)
 
-    _model = BiLSTMModel(
-        input_dim=1,
-        hidden_dim=160,
-        num_layers=3,
-        additional_dim=2,
-        output_dim=3,
-        dropout=0.5
-    )
+    if scaler_inc_path:
+        try:
+            _scaler_inc = joblib.load(scaler_inc_path)
+        except:
+            _scaler_inc = None
+    else:
+        _scaler_inc = None
 
-    state_dict = torch.load(model_path, map_location=_device)
-    _model.load_state_dict(state_dict)
-    _model.to(_device)
-    _model.eval()
-    return True
+    _model = BiLSTMModel(input_dim=1, hidden_dim=160, num_layers=3,
+                         additional_dim=2, output_dim=3, dropout=0.5)
+    state = torch.load(model_path, map_location=_device)
+    _model.load_state_dict(state)
+    _model.to(_device).eval()
 
-def predict_sir_parameters(raw_incidence_counts, population_size, recovery_rate):
-    global _model, _scaler_additional, _scaler_targets
-    if _model is None:
-        raise RuntimeError("Model not loaded.")
+def predict_sir_parameters(seq, additional_pair):
+    global _scaler_inc
+    x = np.asarray(seq, dtype=np.float32).reshape(1, -1, 1)
 
-    raw_incidence_counts = np.asarray(raw_incidence_counts, dtype=float)
-    if len(raw_incidence_counts) != 61:
-        raise ValueError(f"Expected 61 daily counts, got {len(raw_incidence_counts)}")
+    if _scaler_inc is None:
+        _scaler_inc = create_fixed_incidence_scaler(x.shape[1])
 
-    processed_incidence = preprocess_incidence_data(raw_incidence_counts)
+    x_scaled = _scaler_inc.transform(x.reshape(1, -1)).reshape(1, -1, 1)
+    add_np = np.array([additional_pair], dtype=np.float32)
+    add_scaled = _scaler_add.transform(add_np)
 
-    X_tensor = torch.tensor(processed_incidence.reshape(1, -1, 1),
-                            dtype=torch.float32, device=_device)
-
-    add_inputs = np.array([[population_size, recovery_rate]], dtype=float)
-    add_inputs_scaled = _scaler_additional.transform(add_inputs)
-    add_tensor = torch.tensor(add_inputs_scaled,
-                              dtype=torch.float32, device=_device)
+    x_t = torch.tensor(x_scaled, dtype=torch.float32, device=_device)
+    add_t = torch.tensor(add_scaled, dtype=torch.float32, device=_device)
 
     with torch.no_grad():
-        pred_scaled = _model(X_tensor, add_tensor).cpu().numpy()
-        pred_original = _scaler_targets.inverse_transform(pred_scaled)
+        out = _model(x_t, add_t).cpu().numpy()
 
-    return pred_original[0].tolist()
+    return _scaler_tgt.inverse_transform(out)[0].tolist()
 
 def cleanup_model():
-    global _model, _scaler_additional, _scaler_targets
+    global _model, _scaler_add, _scaler_tgt, _scaler_inc
     _model = None
-    _scaler_additional = None
-    _scaler_targets = None
+    _scaler_add = None
+    _scaler_tgt = None
+    _scaler_inc = None
     return True
 '
 }
@@ -235,12 +231,15 @@ def cleanup_model():
 
   base_dir <- normalizePath(model_dir, winslash = "/", mustWork = TRUE)
   file_paths <- list(
-    model = file.path(base_dir, "model4_bilstm_relchange_no_eps.pt"),
-    scaler_add = file.path(base_dir, "scaler_additional_no_eps.pkl"),
-    scaler_tgt = file.path(base_dir, "scaler_targets_no_eps.pkl")
+    model = file.path(base_dir, "model4_bilstm.pt"),
+    scaler_add = file.path(base_dir, "scaler_additional.pkl"),
+    scaler_tgt = file.path(base_dir, "scaler_targets.pkl"),
+    scaler_inc = file.path(base_dir, "scaler_incidence.pkl")
   )
 
-  missing <- names(file_paths)[!vapply(file_paths, file.exists, logical(1))]
+  # Check required files (scaler_inc is optional)
+  required <- c("model", "scaler_add", "scaler_tgt")
+  missing <- required[!vapply(file_paths[required], file.exists, logical(1))]
   if (length(missing))
     stop("Missing model files: ", paste(missing, collapse = ", "))
 
@@ -298,10 +297,18 @@ init_bilstm_model <- function(model_dir = NULL, force_reload = FALSE) {
 
   reticulate::py_run_string(.get_python_model_code())
 
+  # Load with optional scaler_inc
+  scaler_inc_path <- if (file.exists(file_paths$scaler_inc)) {
+    file_paths$scaler_inc
+  } else {
+    NULL
+  }
+
   reticulate::py$load_model_components(
     model_path = file_paths$model,
     scaler_add_path = file_paths$scaler_add,
-    scaler_tgt_path = file_paths$scaler_tgt
+    scaler_tgt_path = file_paths$scaler_tgt,
+    scaler_inc_path = scaler_inc_path
   )
 
   .bilstm_env$model_loaded <- TRUE
@@ -329,10 +336,13 @@ estimate_sir_parameters <- function(daily_cases, population_size, recovery_rate)
 
   out <- reticulate::py$predict_sir_parameters(
     as.numeric(daily_cases),
-    as.numeric(population_size),
-    as.numeric(recovery_rate)
+    list(as.numeric(population_size), as.numeric(recovery_rate))
   )
   names(out) <- c("ptran", "crate", "R0")
+
+  # Recalculate crate based on R0, recovery_rate, and ptran
+  out["crate"] <- out["R0"] * recovery_rate / out["ptran"]
+
   out
 }
 
@@ -368,40 +378,6 @@ calibrate_sir <- function(daily_cases,
 # =============================================================================
 # Utilities
 # =============================================================================
-
-#' Demonstrate preprocessing (not required for prediction)
-#'
-#' @param raw_counts Numeric vector of raw daily incidence counts.
-#'
-#' @return A data frame with columns `day`, `raw_count`, and `percentage_change`.
-#' @export
-show_preprocessing <- function(raw_counts) {
-  if (!is.numeric(raw_counts))
-    stop("raw_counts must be numeric")
-
-  py_code <- '
-def show_preprocessing_temp(counts):
-    import numpy as np
-    counts = np.asarray(counts, dtype=float)
-    processed = np.zeros_like(counts)
-    processed[1:] = np.where(
-        counts[:-1] != 0,
-        (counts[1:] - counts[:-1]) / counts[:-1],
-        0
-    )
-    return processed.tolist()
-  '
-
-  reticulate::py_run_string(py_code)
-  processed <- reticulate::py$show_preprocessing_temp(as.numeric(raw_counts))
-
-  data.frame(
-    day = seq_along(raw_counts) - 1,
-    raw_count = raw_counts,
-    percentage_change = round(processed, 4),
-    stringsAsFactors = FALSE
-  )
-}
 
 #' Check model status
 #'

@@ -112,15 +112,6 @@ params_comparison <- bind_rows(
 params_comparison
 ```
 
-## What preprocessing does the model use?
-
-For transparency (not required for users), `show_preprocessing()` demonstrates the percentage-change transform applied internally.
-
-```{r}
-preprocessing_demo <- show_preprocessing(incidence_ts[1:10])
-preprocessing_demo
-```
-
 ## Forward Simulations: True vs LSTM Parameters
 
 We run multiple replicates with the true parameters and with the LSTM-calibrated parameters to compare dynamics.
@@ -203,7 +194,6 @@ param_bias <- tibble(
 ) %>%
   mutate(
     Bias = LSTM - True,
-    Relative_Bias = (LSTM - True) / True * 100
   )
 
 param_bias
