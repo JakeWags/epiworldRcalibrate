@@ -1,13 +1,18 @@
 url: https://sima-njf.github.io/epiworldRcalibrate/
+
 template:
   bootstrap: 5
-  bootswatch: ~
+  bootswatch: flatly  # Optional: adds a nice theme (cosmo, flatly, lux, minty, etc.)
   bslib:
     preset: bootstrap
+    primary: "#0054AD"  # Optional: custom primary color
 
 navbar:
   title: "epiworldRcalibrate"
   left:
+    - icon: fa-home
+      text: "Home"
+      href: index.html
     - text: "Get Started"
       href: articles/calibration_explanation.html
     - text: "Articles"
@@ -20,6 +25,8 @@ navbar:
           href: articles/Real_data.html
     - text: "Reference"
       href: reference/index.html
+    - text: "News"
+      href: news/index.html
   right:
     - icon: fab fa-github
       href: "https://github.com/sima-njf/epiworldRcalibrate"
@@ -27,7 +34,14 @@ navbar:
 
 home:
   title: "BiLSTM Parameter Calibration for epiworldR"
-  description: "Fast, deep-learning-based calibration of SIR model parameters using BiLSTM neural networks"
+  description: |
+    Fast, deep-learning-based calibration of SIR model parameters using
+    Bidirectional Long Short-Term Memory (BiLSTM) neural networks. Provides
+    efficient alternatives to traditional methods like Approximate Bayesian
+    Computation (ABC).
+  links:
+    - text: "Report a bug"
+      href: "https://github.com/sima-njf/epiworldRcalibrate/issues"
 
 authors:
   sima-njf:
@@ -35,15 +49,54 @@ authors:
 
 articles:
   - title: "Getting Started"
-    navbar: ~
+    navbar: "Get Started"
     contents:
       - calibration_explanation
+  - title: "Tutorials"
+    desc: "Detailed guides and examples"
+    contents:
+      - ABC_LSTM
+      - Real_data
+
+reference:
+  - title: "Main Calibration Functions"
+    desc: "Core functions for parameter calibration"
+    contents:
+      - has_concept("calibration")
+      - starts_with("calibrate")
+  - title: "Data Processing"
+    desc: "Functions for preparing and handling data"
+    contents:
+      - get_covid_data
+      - has_concept("data")
+  - title: "Utility Functions"
+    desc: "Helper and utility functions"
+    contents:
+      - has_concept("utilities")
+  - title: "Datasets"
+    desc: "Built-in datasets"
+    contents:
+      - utah_covid_data
 
 footer:
   structure:
     left: [developed_by, built_with]
-    right: [package]
+    right: [package, license]
   components:
     developed_by: "Developed by [Sima Najafzadehkhoei](https://github.com/sima-njf)"
     built_with: "Built with [pkgdown](https://pkgdown.r-lib.org/)"
     package: "epiworldRcalibrate"
+    license: "Licensed under MIT"
+
+development:
+  mode: auto  # auto, release, devel, or unreleased
+
+figures:
+  dev: ragg::agg_png
+  dpi: 96
+  dev.args: []
+  fig.ext: png
+  fig.width: 7
+  fig.height: 5
+  fig.retina: 2
+  bg: NA

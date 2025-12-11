@@ -71,7 +71,6 @@ jobs:
         run: |
           mkdir -p vignettes_temp
           mv vignettes/ABC_LSTM.qmd vignettes_temp/ 2>/dev/null || true
-          mv vignettes/Real_data.qmd vignettes_temp/ 2>/dev/null || true
       # ---------------------------------------------------------
       # 4. Build pkgdown website
       # ---------------------------------------------------------
@@ -88,7 +87,6 @@ jobs:
         run: |
           mkdir -p docs/articles
           cp vignettes/ABC_LSTM.html docs/articles/ 2>/dev/null || echo "ABC_LSTM.html not found"
-          cp vignettes/Real_data.html docs/articles/ 2>/dev/null || echo "Real_data.html not found"
           ls -la docs/articles/
       # Upload artifact for GitHub Pages deployment
       - name: Upload Pages artifact
