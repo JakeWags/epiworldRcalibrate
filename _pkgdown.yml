@@ -14,8 +14,6 @@ navbar:
       menu:
         - text: "Introduction to Calibration"
           href: articles/calibration_explanation.html
-        - text: "---"
-        - text: "Advanced Examples (Pre-rendered)"
         - text: "BiLSTM vs ABC Comparison"
           href: articles/ABC_LSTM.html
         - text: "Real Data Example"
@@ -40,6 +38,10 @@ articles:
     navbar: ~
     contents:
       - calibration_explanation
+  - title: "Advanced Examples"
+    contents:
+      - ABC_LSTM
+      - Real_data
 
 footer:
   structure:

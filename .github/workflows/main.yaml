@@ -65,17 +65,6 @@ jobs:
       - name: Install epiworldRcalibrate
         run: R CMD INSTALL .
       # ---------------------------------------------------------
-      # Exclude computationally intensive vignettes from CI build
-      # ---------------------------------------------------------
-      - name: Exclude intensive vignettes (network + compute intensive)
-        run: |
-          mkdir -p vignettes_backup
-          # These vignettes download data and run 2000+ simulations
-          mv vignettes/ABC_LSTM.qmd vignettes_backup/ 2>/dev/null || true
-          mv vignettes/Real_data.qmd vignettes_backup/ 2>/dev/null || true
-          echo "Vignettes to be built:"
-          ls -la vignettes/*.qmd
-      # ---------------------------------------------------------
       # 4. Build pkgdown website
       # ---------------------------------------------------------
       - name: Build pkgdown site

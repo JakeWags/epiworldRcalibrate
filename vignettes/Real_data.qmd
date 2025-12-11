@@ -12,6 +12,8 @@ format:
     theme: cosmo
     embed-resources: true
 editor: visual
+execute:
+  freeze: true
 ---
 
 ## Introduction
