@@ -1,7 +1,7 @@
 ---
 title: "Comparing BiLSTM and ABC Calibration for SIR Models"
 subtitle: "Utah COVID-19 Case Prediction with Uncertainty Quantification"
-author: "Your Name"
+author: "Sima Najafzadehkhoei"
 date: today
 format:
   html:
@@ -12,8 +12,6 @@ format:
     theme: cosmo
     embed-resources: true
 editor: visual
-execute:
-  freeze: true
 ---
 
 ## Introduction

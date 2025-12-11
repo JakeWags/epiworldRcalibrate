@@ -26,7 +26,6 @@ The package is fully integrated with **epiworldR** and requires **no external Py
 * **One-line calibration** via `calibrate_sir()`
 * **Automatic deep learning backend** (initialized on demand)
 * **Compatible with all epiworldR SIR simulations**
-* **Transparent preprocessing** via `show_preprocessing()`
 * **Designed for reproducible epidemic modeling workflows**
 
 ---
