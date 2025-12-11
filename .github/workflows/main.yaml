@@ -65,6 +65,13 @@ jobs:
       - name: Install epiworldRcalibrate
         run: R CMD INSTALL .
       # ---------------------------------------------------------
+      # Temporarily hide intensive vignettes from pkgdown
+      # ---------------------------------------------------------
+      - name: Hide intensive vignettes during build
+        run: |
+          mkdir -p vignettes_temp
+          mv vignettes/ABC_LSTM.qmd vignettes_temp/ 2>/dev/null || true
+      # ---------------------------------------------------------
       # 4. Build pkgdown website
       # ---------------------------------------------------------
       - name: Build pkgdown site
