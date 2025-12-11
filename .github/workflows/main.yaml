@@ -93,7 +93,7 @@ jobs:
       # Upload artifact for GitHub Pages deployment
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-        uses: upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v3
         with:
           path: docs
       # Upload artifact for PR preview
