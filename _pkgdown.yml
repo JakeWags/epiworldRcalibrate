@@ -38,10 +38,6 @@ articles:
     navbar: ~
     contents:
       - calibration_explanation
-  - title: "Advanced Examples"
-    contents:
-      - ABC_LSTM
-      - Real_data
 
 footer:
   structure:
