@@ -103,7 +103,7 @@ We define the population size and recovery rate, then use the BiLSTM to estimate
 
 ```{r calibrate}
 # Model configuration
-N     <- 50000    # Population size
+N     <- 500000    # Population size
 recov <- 1 / 7     # Recovery rate (7-day infectious period)
 
 # LSTM calibration
