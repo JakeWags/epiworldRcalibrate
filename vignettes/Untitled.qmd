@@ -1,7 +1,7 @@
 ---
 title: "Comparing BiLSTM and ABC Calibration for SIR Models"
 subtitle: "Utah COVID-19 Case Prediction with Uncertainty Quantification"
-author: "Sima Najafzadehkhoei"
+author: "Your Name"
 date: today
 format:
   html:
@@ -27,7 +27,7 @@ Both methods calibrate SIR model parameters from observed COVID-19 incidence dat
 
 1.  Download recent COVID-19 case data from Utah (61 days)
 2.  **BiLSTM calibration**: Estimate parameters using trained neural network
-3.  **ABC calibration**: Load pre-computed parameters from package data
+3.  **ABC calibration**: Estimate parameters using MCMC with 50% burn-in
 4.  Run 2,000 stochastic SIR simulations for each method
 5.  Compare predictions, uncertainty, and computational time
 
@@ -40,41 +40,67 @@ suppressPackageStartupMessages({
   library(epiworldR)
   library(epiworldRcalibrate)
   library(tictoc)
-  library(data.table)
-  library(knitr)
 })
 ```
 
 ## Data Acquisition
 
-### Load Packaged Data
+### Download Functions
 
-```{r data-load}
-data("utah_covid_data")
-data("abc_calibration_results")
+```{r data-helpers}
+get_data_from_url <- function(data_url, target_file) {
+  tryCatch({
+    temp_file <- tempfile()
+    download.file(data_url, temp_file, mode = "wb")
+    
+    datafile_name <- grep(
+      target_file,
+      unzip(temp_file, list = TRUE)$Name,
+      ignore.case = TRUE,
+      value = TRUE
+    )
+    
+    if (length(datafile_name) == 0L)
+      stop("Target file not found in ZIP archive.")
+    
+    datafile <- unz(temp_file, datafile_name[1])
+    collected_data <- read.csv(datafile)
+    collected_data
+  },
+  error = function(cond) {
+    message("Error: ", conditionMessage(cond))
+    return(-1)
+  },
+  warning = function(cond) {
+    message("Warning: ", conditionMessage(cond))
+    return(-2)
+  },
+  finally = unlink(temp_file))
+}
 
-# Preview the COVID data
-head(utah_covid_data)
-summary(utah_covid_data)
+get_covid_data <- function(n_days) {
+  data_url <- "https://coronavirus-dashboard.utah.gov/Utah_COVID19_data.zip"
+  target_file_regex <- "Trends_Epidemic+"
+  
+  covid_data <- get_data_from_url(data_url, target_file_regex)
+  
+  if (is.numeric(covid_data) && covid_data < 0)
+    stop("Failed to download or read Utah COVID-19 data.")
+  
+  covid_data$Date <- as.Date(covid_data$Date)
+  
+  last_date <- max(covid_data$Date, na.rm = TRUE)
+  covid_data <- subset(covid_data, Date > (last_date - n_days)) %>% 
+    arrange(Date)
+  
+  stopifnot("Daily.Cases" %in% names(covid_data))
+  covid_data
+}
 ```
 
 ### Load Recent Case Data
 
 ```{r load-data}
-get_covid_data <- function(n_days) {
-  
-  # Use packaged data
-  covid_data <- utah_covid_data
-  
-  # Filter to last n_days
-  last_date <- max(covid_data$Date, na.rm = TRUE)
-  covid_data <- subset(covid_data, Date > (last_date - n_days)) %>% 
-    dplyr::arrange(Date)
-  
-  stopifnot("Daily.Cases" %in% names(covid_data))
-  covid_data
-}
-
 n_days <- 61
 covid_data <- get_covid_data(n_days)
 incidence <- covid_data$Daily.Cases
@@ -91,11 +117,9 @@ cat("Mean daily cases:", round(mean(incidence), 1), "\n")
 ### Configuration
 
 ```{r config}
-N <- 30000      # Population size (BiLSTM)
-recov <- 1 / 7  # Recovery rate (7-day infectious period)
+N     <- 10000      # Population size
+recov <- 1 / 7     # Recovery rate (7-day infectious period)
 model_ndays <- 60  # Simulation days
-
-# ABC uses N=30000 from saved calibration
 ```
 
 ## Method 1: BiLSTM Calibration
@@ -173,89 +197,133 @@ bilstm_quantiles <- bilstm_transitions %>%
 
 ## Method 2: ABC Calibration
 
-### Load Pre-Calibrated ABC Results
+### ABC Helper Functions
 
-```{r abc-load-results}
-cat("\n=== ABC Calibration (Pre-computed) ===\n")
+```{r abc-functions}
+model_seed <- 122
 
-# Extract calibrated parameters from package data
-abc_crate <- abc_calibration_results$abc_crate
-abc_recov <- abc_calibration_results$abc_recov
-abc_ptran <- abc_calibration_results$abc_ptran
-abc_R0 <- abc_calibration_results$abc_R0
+simulate_epidemic_calib <- function(params, ndays = model_ndays, seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
+  
+  sim_model <- ModelSIRCONN(
+    name="sim",
+    n                 = as.integer(params[1]),
+    prevalence        = as.numeric(params[2]),
+    contact_rate      = as.numeric(params[3]),
+    transmission_rate = as.numeric(params[5]),
+    recovery_rate     = as.numeric(params[4])
+  )
+  
+  verbose_off(sim_model)
+  run(sim_model, ndays = ndays)
+  
+  counts <- get_hist_total(sim_model)
+  infected_counts <- counts[counts$state == "Infected", "counts"]
+  
+  return(infected_counts)
+}
 
-# Extract confidence intervals
-abc_lower <- abc_calibration_results$abc_lower
-abc_upper <- abc_calibration_results$abc_upper
-abc_median <- abc_calibration_results$abc_median
+simulation_fun <- function(params, lfmcmc_obj, observed_data_info) {
+  sim_params <- c(
+    observed_data_info$n,
+    observed_data_info$preval,
+    params[1],  # contact_rate
+    params[2],  # recovery_rate
+    params[3]   # transmission_prob
+  )
+  
+  infected_counts <- simulate_epidemic_calib(sim_params, ndays = model_ndays)
+  return(as.numeric(infected_counts))
+}
 
-# Get timing information
-abc_time_minutes <- abc_calibration_results$abc_time_elapsed / 60
+summary_fun <- function(data, lfmcmc_obj) {
+  return(as.numeric(data))
+}
 
-# Get configuration
-N_abc <- abc_calibration_results$N
-recov_abc <- abc_calibration_results$recov
-n_samples_abc <- abc_calibration_results$n_samples
-burnin_abc <- abc_calibration_results$burnin
+proposal_fun <- function(old_params, lfmcmc_obj) {
+  new_crate <- old_params[1] * exp(rnorm(1, sd = 0.1))
+  new_recov <- plogis(qlogis(old_params[2]) + rnorm(1, sd = 0.1))
+  new_ptran <- plogis(qlogis(old_params[3]) + rnorm(1, sd = 0.1))
+  
+  return(c(new_crate, new_recov, new_ptran))
+}
 
-cat("ABC Configuration:\n")
-cat("Population size:", N_abc, "\n")
-cat("MCMC samples:", n_samples_abc, "(", burnin_abc, "burn-in)\n")
-cat("Epsilon:", round(abc_calibration_results$epsilon, 2), "\n")
-cat("Original computation time:", round(abc_time_minutes, 2), "minutes\n\n")
-
-cat("Calibrated Parameters (Median with 95% CI):\n")
-cat("Contact Rate:      ", sprintf("%.4f", abc_crate), 
-    " [", sprintf("%.4f", abc_lower[1]), ", ", sprintf("%.4f", abc_upper[1]), "]\n", sep = "")
-cat("Recovery Rate:     ", sprintf("%.4f", abc_recov), 
-    " [", sprintf("%.4f", abc_lower[2]), ", ", sprintf("%.4f", abc_upper[2]), "]\n", sep = "")
-cat("Transmission Prob: ", sprintf("%.4f", abc_ptran), 
-    " [", sprintf("%.4f", abc_lower[3]), ", ", sprintf("%.4f", abc_upper[3]), "]\n", sep = "")
-cat("R0:                ", sprintf("%.4f", abc_R0), "\n", sep = "")
+kernel_fun <- function(simulated_stat, observed_stat, epsilon, lfmcmc_obj) {
+  diff <- sum((simulated_stat - observed_stat)^2)
+  return(exp(-diff / (2 * epsilon^2)))
+}
 ```
 
-### ABC Posterior Distributions
+### Run ABC Calibration
 
-```{r abc-posterior, fig.width=12, fig.height=4}
-# Extract posterior samples
-posterior <- abc_calibration_results$post_burnin
+```{r abc-calibration}
+cat("\n=== ABC Calibration ===\n")
 
-# Calculate R0 from posterior samples
-R0_samples <- (posterior[, 1] * posterior[, 3]) / posterior[, 2]
+initial_infected <- incidence_vec[1]
+initial_prevalence <- initial_infected / N
 
-# Create data frame for plotting
-posterior_df <- data.frame(
-  contact_rate = posterior[, 1],
-  recovery_rate = posterior[, 2],
-  transmission_prob = posterior[, 3],
-  R0 = R0_samples
+observed_data_info <- list(
+  n = N,
+  preval = initial_prevalence
 )
 
-# Reshape for faceted plot
-posterior_long <- posterior_df %>%
-  pivot_longer(cols = everything(), names_to = "parameter", values_to = "value") %>%
-  mutate(parameter = factor(parameter, 
-    levels = c("contact_rate", "recovery_rate", "transmission_prob", "R0"),
-    labels = c("Contact Rate", "Recovery Rate", "Transmission Prob", "R0")
-  ))
+dummy_model <- ModelSIRCONN(
+  name              = "dummy",
+  n                 = as.integer(N),
+  prevalence        = 0.1,
+  contact_rate      = 6.0,
+  transmission_rate = 0.1,
+  recovery_rate     = 0.1
+)
 
-# Plot posterior distributions
-ggplot(posterior_long, aes(x = value)) +
-  geom_histogram(bins = 30, fill = "#2E86DE", alpha = 0.7, color = "white") +
-  facet_wrap(~parameter, scales = "free", ncol = 4) +
-  labs(
-    title = "ABC Posterior Distributions",
-    subtitle = paste0("Based on ", nrow(posterior), " MCMC samples (post burn-in)"),
-    x = "Parameter Value",
-    y = "Frequency"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    plot.title = element_text(face = "bold", hjust = 0.5),
-    plot.subtitle = element_text(hjust = 0.5),
-    strip.text = element_text(face = "bold"),
-    panel.grid.minor = element_blank()
-  )
+local_simulation_fun <- function(params, lfmcmc_obj) {
+  return(simulation_fun(params, lfmcmc_obj, observed_data_info))
+}
+
+lfmcmc_obj <- LFMCMC(dummy_model)
+lfmcmc_obj <- set_simulation_fun(lfmcmc_obj, local_simulation_fun)
+lfmcmc_obj <- set_summary_fun(lfmcmc_obj, summary_fun)
+lfmcmc_obj <- set_proposal_fun(lfmcmc_obj, proposal_fun)
+lfmcmc_obj <- set_kernel_fun(lfmcmc_obj, kernel_fun)
+lfmcmc_obj <- set_observed_data(lfmcmc_obj, incidence_vec)
+
+init_params <- c(5, 1/7, 0.0571)
+n_samples_calib <- 2000
+burnin <- 1000
+epsilon <- sqrt(sum(incidence_vec^2)) * 0.05
+
+cat("Running LFMCMC with", n_samples_calib, "samples (50% burn-in)...\n")
+
+tic("ABC calibration")
+run_lfmcmc(
+  lfmcmc = lfmcmc_obj,
+  params_init = init_params,
+  n_samples = n_samples_calib,
+  epsilon = epsilon,
+  seed = model_seed
+)
+abc_time <- toc()
+
+accepted <- get_all_accepted_params(lfmcmc_obj)
+post_burnin <- tail(accepted, n = (n_samples_calib - burnin))
+
+abc_median <- apply(post_burnin, 2, median)
+abc_lower <- apply(post_burnin, 2, quantile, probs = 0.025)
+abc_upper <- apply(post_burnin, 2, quantile, probs = 0.975)
+
+abc_crate <- abc_median[1]
+abc_recov <- abc_median[2]
+abc_ptran <- abc_median[3]
+abc_R0 <- (abc_crate * abc_ptran) / abc_recov
+
+cat("\nCalibrated Parameters (Median with 95% CI):\n")
+cat("Contact Rate:", round(abc_crate, 4), 
+    "[", round(abc_lower[1], 4), ",", round(abc_upper[1], 4), "]\n")
+cat("Recovery Rate:", round(abc_recov, 4), 
+    "[", round(abc_lower[2], 4), ",", round(abc_upper[2], 4), "]\n")
+cat("Transmission Prob:", round(abc_ptran, 4), 
+    "[", round(abc_lower[3], 4), ",", round(abc_upper[3], 4), "]\n")
+cat("R0:", round(abc_R0, 4), "\n")
 ```
 
 ### Stochastic Simulations (ABC)
@@ -263,13 +331,9 @@ ggplot(posterior_long, aes(x = value)) +
 ```{r abc-simulations}
 cat("\n=== Running 2,000 Stochastic Simulations (ABC) ===\n")
 
-initial_infected <- incidence_vec[1]
-N_abc <- abc_calibration_results$N
-initial_prevalence <- initial_infected / N_abc
-
 abc_model <- ModelSIRCONN(
   name              = "ABC SIR",
-  n                 = N_abc,
+  n                 = N,
   prevalence        = initial_prevalence,
   contact_rate      = abc_crate,
   transmission_rate = abc_ptran,
@@ -319,11 +383,12 @@ abc_quantiles <- abc_transitions %>%
 
 ```{r timing-summary}
 bilstm_total_mins <- (bilstm_time$toc - bilstm_time$tic) / 60
-speedup <- abc_time_minutes / bilstm_total_mins
+abc_total_mins <- (abc_time$toc - abc_time$tic) / 60
+speedup <- abc_total_mins / bilstm_total_mins
 
 cat("=== Computational Time Comparison ===\n\n")
 cat("BiLSTM calibration:", round(bilstm_total_mins, 2), "minutes\n")
-cat("ABC calibration:", round(abc_time_minutes, 2), "minutes (pre-computed)\n")
+cat("ABC calibration:", round(abc_total_mins, 2), "minutes\n")
 cat("\nSpeedup: BiLSTM is", round(speedup, 1), "x FASTER than ABC\n")
 ```
 
@@ -355,57 +420,6 @@ comparison_df <- data.frame(
 
 knitr::kable(comparison_df, digits = 4, 
              caption = "Parameter Estimates: BiLSTM vs ABC")
-```
-
-### Parameter Uncertainty Analysis
-
-```{r uncertainty-analysis}
-# Calculate R0 statistics from posterior
-R0_samples_calc <- (posterior[, 1] * posterior[, 3]) / posterior[, 2]
-abc_R0_lower <- quantile(R0_samples_calc, 0.025)
-abc_R0_upper <- quantile(R0_samples_calc, 0.975)
-abc_R0_sd <- sd(R0_samples_calc)
-
-# Calculate SD for other parameters
-abc_sd <- apply(posterior, 2, sd)
-
-# Create summary table with uncertainties
-uncertainty_df <- data.frame(
-  Parameter = c("Contact Rate", "Recovery Rate", "Transmission Prob", "R0"),
-  ABC_Median = c(
-    abc_median[1], 
-    abc_median[2], 
-    abc_median[3], 
-    abc_R0
-  ),
-  ABC_Lower = c(
-    abc_lower[1], 
-    abc_lower[2], 
-    abc_lower[3], 
-    abc_R0_lower
-  ),
-  ABC_Upper = c(
-    abc_upper[1], 
-    abc_upper[2], 
-    abc_upper[3], 
-    abc_R0_upper
-  ),
-  ABC_SD = c(
-    abc_sd[1],
-    abc_sd[2],
-    abc_sd[3],
-    abc_R0_sd
-  ),
-  BiLSTM_Point = c(
-    lstm_predictions[["crate"]],
-    recov,
-    lstm_predictions[["ptran"]],
-    lstm_predictions[["R0"]]
-  )
-)
-
-knitr::kable(uncertainty_df, digits = 4,
-             caption = "Parameter Uncertainty: ABC provides full posterior distributions")
 ```
 
 ### Combined Visualization
@@ -487,7 +501,7 @@ p_comparison <- ggplot(plot_df, aes(x = Date)) +
     title = "Comparison: BiLSTM vs ABC Calibration",
     subtitle = paste0(
       "BiLSTM: ", round(bilstm_total_mins, 1), " min | ",
-      "ABC: ", round(abc_time_minutes, 1), " min (pre-computed) | ",
+      "ABC: ", round(abc_total_mins, 1), " min | ",
       "Speedup: ", round(speedup, 1), "x"
     ),
     x = "Date",
@@ -532,7 +546,7 @@ abc_mae <- mean(abs(plot_df$ABC_median - plot_df$Observed))
 
 # Create comparison table
 metrics_df <- data.frame(
-  Metric = c("95% CI Coverage (%)", "RMSE", "MAE", "Calibration Time (min)"),
+  Metric = c("95% CI Coverage (%)", "RMSE", "MAE", "Time (Minutes)"),
   BiLSTM = c(
     round(bilstm_coverage, 1),
     round(bilstm_rmse, 2),
@@ -543,7 +557,7 @@ metrics_df <- data.frame(
     round(abc_coverage, 1),
     round(abc_rmse, 2),
     round(abc_mae, 2),
-    round(abc_time_minutes, 2)
+    round(abc_total_mins, 2)
   )
 )
 
@@ -551,28 +565,8 @@ knitr::kable(metrics_df,
              caption = "Model Performance Comparison")
 ```
 
-## Summary
+## Session Information
 
-This analysis demonstrates that:
-
-1.  **BiLSTM is significantly faster** (\~`r round(speedup, 0)`x speedup) than ABC calibration
-2.  **Both methods produce comparable accuracy** in terms of RMSE and MAE
-3.  **Uncertainty quantification** is similar between methods, with \~`r round(mean(c(bilstm_coverage, abc_coverage)), 0)`% coverage
-4.  **BiLSTM provides instant predictions** making it ideal for real-time applications
-5.  **ABC offers full Bayesian inference** with credible intervals for all parameters
-
-### Key Advantages
-
-**BiLSTM:** - Extremely fast calibration (\<1 minute) - Point estimates for rapid decision-making - Suitable for operational deployment - Real-time epidemic monitoring
-
-**ABC:** - Complete posterior distributions - Full uncertainty quantification - Credible intervals for all parameters - Ideal for research and policy analysis - Better for understanding parameter uncertainty
-
-### Recommendation
-
-The choice between methods depends on the use case: - **BiLSTM** for speed and operational deployment - **ABC** for comprehensive uncertainty quantification and parameter inference - **Hybrid approach**: Use BiLSTM for initial screening, ABC for detailed analysis
-
-### Package Data Note
-
-This vignette uses pre-computed ABC calibration results stored in `abc_calibration_results`. The ABC calibration was performed using LFMCMC with `r n_samples_abc` samples (`r burnin_abc` burn-in) and took approximately `r round(abc_time_minutes, 0)` minutes to complete.
-
-To re-run the ABC calibration yourself, see the script in `data-raw/abc_calibration_results.R`.
+```{r session-info}
+sessionInfo()
+```

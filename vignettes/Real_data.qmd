@@ -103,7 +103,7 @@ We define the population size and recovery rate, then use the BiLSTM to estimate
 
 ```{r calibrate}
 # Model configuration
-N     <- 500000    # Population size
+N     <- 0000  # Population size
 recov <- 1 / 7     # Recovery rate (7-day infectious period)
 
 # LSTM calibration
@@ -159,7 +159,7 @@ The `ModelSIRCONN` structure simulates disease transmission through a contact ne
 
 To quantify uncertainty, we run 2,000 independent stochastic realizations:
 
-```{r run-simulations, cache=TRUE}
+```{r run-simulations}
 saver <- make_saver("transition")
 
 run_multiple(
@@ -167,12 +167,12 @@ run_multiple(
   ndays    = n_days - 1,   # 60 steps yields 61 time points (days 0-60)
   nsims    = 2000,
   saver    = saver,
-  nthreads = 8
+  nthreads = 12
 )
 
 sim_results <- run_multiple_get_results(
   model,
-  nthreads = 8,
+  nthreads = 12,
   freader = data.table::fread
 )
 ```
