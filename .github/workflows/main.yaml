@@ -29,29 +29,29 @@ jobs:
 
     steps:
       # ---------------------------------------------------------
-      # 0. Checkout
+      # Checkout
       # ---------------------------------------------------------
       - uses: actions/checkout@v4
 
       # ---------------------------------------------------------
-      # 1. Install R
+      # Install R
       # ---------------------------------------------------------
       - uses: r-lib/actions/setup-r@v2
         with:
           use-public-rspm: true
 
       # ---------------------------------------------------------
-      # 2. Install Quarto (FIXES YOUR ERROR)
+      # Install Quarto (still OK to install, but not used)
       # ---------------------------------------------------------
       - uses: quarto-dev/quarto-actions/setup@v2
 
       - name: Make Quarto visible to R
         run: |
           echo "QUARTO_PATH=$(which quarto)" >> $GITHUB_ENV
-          quarto --version
+          quarto --version || true
 
       # ---------------------------------------------------------
-      # 3. Install R dependencies
+      # Install R dependencies
       # ---------------------------------------------------------
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
@@ -63,7 +63,7 @@ jobs:
           needs: website
 
       # ---------------------------------------------------------
-      # 4. Install Python for reticulate
+      # Install Python (reticulate support, not used on CI)
       # ---------------------------------------------------------
       - uses: actions/setup-python@v5
         with:
@@ -80,21 +80,13 @@ jobs:
           echo "RETICULATE_PYTHON=$(which python)" >> $GITHUB_ENV
 
       # ---------------------------------------------------------
-      # 5. Install the R package
+      # Install the R package
       # ---------------------------------------------------------
       - name: Install epiworldRcalibrate
         run: R CMD INSTALL .
 
       # ---------------------------------------------------------
-      # 6. Temporarily hide heavy vignettes
-      # ---------------------------------------------------------
-      - name: Hide intensive vignettes
-        run: |
-          mkdir -p vignettes_temp
-          mv vignettes/ABC_LSTM.qmd vignettes_temp/ 2>/dev/null || true
-
-      # ---------------------------------------------------------
-      # 7. Build pkgdown site (IMPORTANT FIX)
+      # Build pkgdown site (ARTICLES DISABLED)
       # ---------------------------------------------------------
       - name: Build pkgdown site
         run: |
@@ -103,34 +95,35 @@ jobs:
               RETICULATE_PYTHON = Sys.which("python"),
               QUARTO_PATH = Sys.which("quarto")
             )
-            pkgdown::build_site_github_pages(
+            pkgdown::build_site(
               new_process = TRUE,
-              install = FALSE
+              install = FALSE,
+              articles = FALSE
             )
           '
 
       # ---------------------------------------------------------
-      # 8. Upload Pages artifact
+      # Upload Pages artifact
       # ---------------------------------------------------------
       - name: Upload Pages artifact
-        if: github.event_name != 'pull_request' &&
-            (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        if: github.event_name != "pull_request" &&
+            (github.ref == "refs/heads/main" || github.ref == "refs/heads/master")
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs
 
       # ---------------------------------------------------------
-      # 9. Upload PR preview
+      # PR preview
       # ---------------------------------------------------------
       - name: Upload PR artifact
-        if: github.event_name == 'pull_request'
+        if: github.event_name == "pull_request"
         uses: actions/upload-artifact@v4
         with:
           name: pkgdown-site
           path: docs
 
       - name: Post artifact link to PR
-        if: github.event_name == 'pull_request'
+        if: github.event_name == "pull_request"
         uses: CDCgov/cfa-actions/post-artifact@v1.2.0
         with:
           artifact-name: pkgdown-site
@@ -140,8 +133,8 @@ jobs:
             The pkgdown site preview is ready 👉 [Download here]({ artifact-url })
 
   deploy:
-    if: github.event_name != 'pull_request' &&
-        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    if: github.event_name != "pull_request" &&
+        (github.ref == "refs/heads/main" || github.ref == "refs/heads/master")
 
     environment:
       name: github-pages
