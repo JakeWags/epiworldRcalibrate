@@ -39,7 +39,14 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libcurl4-openssl-dev libharfbuzz-dev libfribidi-dev
+          sudo apt-get install -y \
+            libcurl4-openssl-dev \
+            libharfbuzz-dev \
+            libfribidi-dev \
+            libfreetype6-dev \
+            libpng-dev \
+            libtiff5-dev \
+            libjpeg-dev
 
       - name: Install R dependencies
         uses: r-lib/actions/setup-r-dependencies@v2
@@ -49,6 +56,13 @@ jobs:
             any::knitr
             any::rmarkdown
             any::quarto
+            any::tidyverse
+            any::ggplot2
+            any::epiworldR
+            any::tictoc
+            any::data.table
+            any::dplyr
+            any::tidyr
           needs: website
 
       - name: Install package
@@ -56,7 +70,7 @@ jobs:
 
       - name: Build pkgdown site
         run: |
-          Rscript -e 'pkgdown::build_site(new_process = TRUE, install = FALSE)'
+          Rscript -e 'pkgdown::build_site(new_process = FALSE, install = FALSE)'
 
       - name: Upload Pages artifact
         if: github.ref == 'refs/heads/main'
