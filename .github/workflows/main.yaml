@@ -25,6 +25,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy tensorflow keras
+
       - name: Setup Quarto
         uses: quarto-dev/quarto-actions/setup@v2
 
@@ -63,33 +73,22 @@ jobs:
             any::data.table
             any::dplyr
             any::tidyr
+            any::reticulate
           needs: website
+
+      - name: Configure reticulate
+        run: |
+          Rscript -e '
+            reticulate::use_python(Sys.which("python"), required = TRUE)
+            cat("Python path:", reticulate::py_config()$python, "\n")
+          '
 
       - name: Install package
         run: R CMD INSTALL .
 
-      - name: Verify Quarto installation
+      - name: Build pkgdown site
         run: |
-          quarto --version
-          quarto check
-
-      - name: Test render single vignette
-        run: |
-          cd vignettes
-          quarto render calibration_explanation.qmd --to html
-        continue-on-error: true
-
-      - name: Build pkgdown site with verbose output
-        run: |
-          Rscript -e '
-            options(pkgdown.internet = TRUE)
-            pkgdown::build_site(
-              new_process = FALSE,
-              install = FALSE,
-              preview = FALSE,
-              devel = FALSE
-            )
-          '
+          Rscript -e 'pkgdown::build_site(new_process = FALSE, install = FALSE)'
 
       - name: Upload Pages artifact
         if: github.ref == 'refs/heads/main'
