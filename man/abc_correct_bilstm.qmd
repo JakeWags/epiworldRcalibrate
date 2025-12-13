@@ -1,7 +1,7 @@
 ---
 title: "Comparing BiLSTM and ABC Calibration for SIR Models"
 subtitle: "Utah COVID-19 Case Prediction with Uncertainty Quantification"
-author: "Sima Najafzadehkhoei"
+author: "Your Name"
 date: today
 format:
   html:
@@ -25,9 +25,9 @@ Both methods calibrate SIR model parameters from observed COVID-19 incidence dat
 
 ### Workflow Overview
 
-1.  Load COVID-19 case data from Utah (61 days)
+1.  Download recent COVID-19 case data from Utah (61 days)
 2.  **BiLSTM calibration**: Estimate parameters using trained neural network
-3.  **ABC calibration**: Estimate parameters using LFMCMC with 50% burn-in
+3.  **ABC calibration**: Estimate parameters using MCMC with 50% burn-in
 4.  Run 2,000 stochastic SIR simulations for each method
 5.  Compare predictions, uncertainty, and computational time
 
@@ -40,40 +40,67 @@ suppressPackageStartupMessages({
   library(epiworldR)
   library(epiworldRcalibrate)
   library(tictoc)
-  library(data.table)
-  library(knitr)
 })
 ```
 
 ## Data Acquisition
 
-### Load Packaged Data
+### Download Functions
 
-```{r data-load}
-data("utah_covid_data")
+```{r data-helpers}
+get_data_from_url <- function(data_url, target_file) {
+  tryCatch({
+    temp_file <- tempfile()
+    download.file(data_url, temp_file, mode = "wb")
+    
+    datafile_name <- grep(
+      target_file,
+      unzip(temp_file, list = TRUE)$Name,
+      ignore.case = TRUE,
+      value = TRUE
+    )
+    
+    if (length(datafile_name) == 0L)
+      stop("Target file not found in ZIP archive.")
+    
+    datafile <- unz(temp_file, datafile_name[1])
+    collected_data <- read.csv(datafile)
+    collected_data
+  },
+  error = function(cond) {
+    message("Error: ", conditionMessage(cond))
+    return(-1)
+  },
+  warning = function(cond) {
+    message("Warning: ", conditionMessage(cond))
+    return(-2)
+  },
+  finally = unlink(temp_file))
+}
 
-# Preview the data
-head(utah_covid_data)
-summary(utah_covid_data)
+get_covid_data <- function(n_days) {
+  data_url <- "https://coronavirus-dashboard.utah.gov/Utah_COVID19_data.zip"
+  target_file_regex <- "Trends_Epidemic+"
+  
+  covid_data <- get_data_from_url(data_url, target_file_regex)
+  
+  if (is.numeric(covid_data) && covid_data < 0)
+    stop("Failed to download or read Utah COVID-19 data.")
+  
+  covid_data$Date <- as.Date(covid_data$Date)
+  
+  last_date <- max(covid_data$Date, na.rm = TRUE)
+  covid_data <- subset(covid_data, Date > (last_date - n_days)) %>% 
+    arrange(Date)
+  
+  stopifnot("Daily.Cases" %in% names(covid_data))
+  covid_data
+}
 ```
 
 ### Load Recent Case Data
 
 ```{r load-data}
-get_covid_data <- function(n_days) {
-  
-  # Use packaged data
-  covid_data <- utah_covid_data
-  
-  # Filter to last n_days
-  last_date <- max(covid_data$Date, na.rm = TRUE)
-  covid_data <- subset(covid_data, Date > (last_date - n_days)) %>% 
-    dplyr::arrange(Date)
-  
-  stopifnot("Daily.Cases" %in% names(covid_data))
-  covid_data
-}
-
 n_days <- 61
 covid_data <- get_covid_data(n_days)
 incidence <- covid_data$Daily.Cases
@@ -90,10 +117,9 @@ cat("Mean daily cases:", round(mean(incidence), 1), "\n")
 ### Configuration
 
 ```{r config}
-N     <- 50000      # Population size
+N     <- 10000      # Population size
 recov <- 1 / 7     # Recovery rate (7-day infectious period)
 model_ndays <- 60  # Simulation days
-model_seed <- 122
 ```
 
 ## Method 1: BiLSTM Calibration
@@ -171,70 +197,59 @@ bilstm_quantiles <- bilstm_transitions %>%
 
 ## Method 2: ABC Calibration
 
-### Setup ABC Model
-
-Following the LFMCMC vignette approach, we create a base model that will be updated with proposed parameters during calibration.
-
-```{r abc-setup}
-# Create base SIR model for ABC calibration
-initial_infected <- incidence_vec[1]
-initial_prevalence <- initial_infected / N
-
-abc_base_model <- ModelSIRCONN(
-  name              = "ABC SIR",
-  n                 = N,
-  prevalence        = initial_prevalence,
-  contact_rate      = 5.0,
-  transmission_rate = 0.05,
-  recovery_rate     = 1/7
-)
-
-verbose_off(abc_base_model)
-```
-
 ### ABC Helper Functions
 
-Following the vignette's pattern exactly - using `set_param()` to update the model.
-
 ```{r abc-functions}
-# Simulation function: runs model with proposed parameters
-# Returns infected counts over time (matching observed incidence structure)
-simulation_fun <- function(params, lfmcmc_obj) {
+model_seed <- 122
+
+simulate_epidemic_calib <- function(params, ndays = model_ndays, seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
   
-  set_param(abc_base_model, "Contact rate", params[1])
-  set_param(abc_base_model, "Transmission rate", params[2])
-  set_param(abc_base_model, "Recovery rate", params[3])
+  sim_model <- ModelSIRCONN(
+    name="sim",
+    n                 = as.integer(params[1]),
+    prevalence        = as.numeric(params[2]),
+    contact_rate      = as.numeric(params[3]),
+    transmission_rate = as.numeric(params[5]),
+    recovery_rate     = as.numeric(params[4])
+  )
   
-  run(abc_base_model, ndays = model_ndays)
+  verbose_off(sim_model)
+  run(sim_model, ndays = ndays)
   
-  # Get infected counts over time
-  hist <- get_hist_total(abc_base_model)
-  infected_counts <- hist[hist$state == "Infected", "counts"]
+  counts <- get_hist_total(sim_model)
+  infected_counts <- counts[counts$state == "Infected", "counts"]
   
   return(infected_counts)
 }
 
-# Summary function: extracts summary statistics
-# For our case, the incidence data is already a summary
-summary_fun <- function(data, lfmcmc_obj) {
-  return(data)
-}
-
-# Proposal function: generates new parameter proposals
-# Contact rate: log-normal random walk
-# Transmission and recovery rates: logit-normal random walk (bounded 0-1)
-proposal_fun <- function(old_params, lfmcmc_obj) {
-  new_crate <- old_params[1] * exp(rnorm(1, mean = 0, sd = 0.1))
-  new_ptran <- plogis(qlogis(old_params[2]) + rnorm(1, mean = 0, sd = 0.1))
-  new_recov <- plogis(qlogis(old_params[3]) + rnorm(1, mean = 0, sd = 0.1))
+simulation_fun <- function(params, lfmcmc_obj, observed_data_info) {
+  sim_params <- c(
+    observed_data_info$n,
+    observed_data_info$preval,
+    params[1],  # contact_rate
+    params[2],  # recovery_rate
+    params[3]   # transmission_prob
+  )
   
-  return(c(new_crate, new_ptran, new_recov))
+  infected_counts <- simulate_epidemic_calib(sim_params, ndays = model_ndays)
+  return(as.numeric(infected_counts))
 }
 
-# Kernel function: scores simulation against observed data
-# Uses sum of squared differences with exponential kernel
-kernel_fun <- function(simulated_stats, observed_stats, epsilon, lfmcmc_obj) {
-  diff <- sum((simulated_stats - observed_stats)^2)
+summary_fun <- function(data, lfmcmc_obj) {
+  return(as.numeric(data))
+}
+
+proposal_fun <- function(old_params, lfmcmc_obj) {
+  new_crate <- old_params[1] * exp(rnorm(1, sd = 0.1))
+  new_recov <- plogis(qlogis(old_params[2]) + rnorm(1, sd = 0.1))
+  new_ptran <- plogis(qlogis(old_params[3]) + rnorm(1, sd = 0.1))
+  
+  return(c(new_crate, new_recov, new_ptran))
+}
+
+kernel_fun <- function(simulated_stat, observed_stat, epsilon, lfmcmc_obj) {
+  diff <- sum((simulated_stat - observed_stat)^2)
   return(exp(-diff / (2 * epsilon^2)))
 }
 ```
@@ -244,25 +259,40 @@ kernel_fun <- function(simulated_stats, observed_stats, epsilon, lfmcmc_obj) {
 ```{r abc-calibration}
 cat("\n=== ABC Calibration ===\n")
 
-# Initialize LFMCMC object (following vignette pattern with pipe)
-lfmcmc_obj <- LFMCMC(abc_base_model) |>
-  set_simulation_fun(simulation_fun) |>
-  set_summary_fun(summary_fun) |>
-  set_proposal_fun(proposal_fun) |>
-  set_kernel_fun(kernel_fun) |>
-  set_observed_data(incidence_vec)
+initial_infected <- incidence_vec[1]
+initial_prevalence <- initial_infected / N
 
-# Set initial parameters and calibration settings
-init_params <- c(5.0, 0.05, 1/7)  # contact_rate, trans_rate, recov_rate
-n_samples_calib <- 3000
-burnin <- 1500
+observed_data_info <- list(
+  n = N,
+  preval = initial_prevalence
+)
+
+dummy_model <- ModelSIRCONN(
+  name              = "dummy",
+  n                 = as.integer(N),
+  prevalence        = 0.1,
+  contact_rate      = 5.0,
+  transmission_rate = 0.1,
+  recovery_rate     = 0.1
+)
+
+local_simulation_fun <- function(params, lfmcmc_obj) {
+  return(simulation_fun(params, lfmcmc_obj, observed_data_info))
+}
+
+lfmcmc_obj <- LFMCMC(dummy_model)
+lfmcmc_obj <- set_simulation_fun(lfmcmc_obj, local_simulation_fun)
+lfmcmc_obj <- set_summary_fun(lfmcmc_obj, summary_fun)
+lfmcmc_obj <- set_proposal_fun(lfmcmc_obj, proposal_fun)
+lfmcmc_obj <- set_kernel_fun(lfmcmc_obj, kernel_fun)
+lfmcmc_obj <- set_observed_data(lfmcmc_obj, incidence_vec)
+
+init_params <- c(5, 1/7, 0.0571)
+n_samples_calib <- 2000
+burnin <- 1000
 epsilon <- sqrt(sum(incidence_vec^2)) * 0.05
 
 cat("Running LFMCMC with", n_samples_calib, "samples (50% burn-in)...\n")
-cat("Initial parameters:\n")
-cat("  Contact rate =", init_params[1], "\n")
-cat("  Transmission rate =", init_params[2], "\n")
-cat("  Recovery rate =", init_params[3], "\n")
 
 tic("ABC calibration")
 run_lfmcmc(
@@ -274,7 +304,6 @@ run_lfmcmc(
 )
 abc_time <- toc()
 
-# Extract and summarize posterior samples
 accepted <- get_all_accepted_params(lfmcmc_obj)
 post_burnin <- tail(accepted, n = (n_samples_calib - burnin))
 
@@ -283,16 +312,16 @@ abc_lower <- apply(post_burnin, 2, quantile, probs = 0.025)
 abc_upper <- apply(post_burnin, 2, quantile, probs = 0.975)
 
 abc_crate <- abc_median[1]
-abc_ptran <- abc_median[2]
-abc_recov <- abc_median[3]
+abc_recov <- abc_median[2]
+abc_ptran <- abc_median[3]
 abc_R0 <- (abc_crate * abc_ptran) / abc_recov
 
 cat("\nCalibrated Parameters (Median with 95% CI):\n")
 cat("Contact Rate:", round(abc_crate, 4), 
     "[", round(abc_lower[1], 4), ",", round(abc_upper[1], 4), "]\n")
-cat("Transmission Prob:", round(abc_ptran, 4), 
-    "[", round(abc_lower[2], 4), ",", round(abc_upper[2], 4), "]\n")
 cat("Recovery Rate:", round(abc_recov, 4), 
+    "[", round(abc_lower[2], 4), ",", round(abc_upper[2], 4), "]\n")
+cat("Transmission Prob:", round(abc_ptran, 4), 
     "[", round(abc_lower[3], 4), ",", round(abc_upper[3], 4), "]\n")
 cat("R0:", round(abc_R0, 4), "\n")
 ```
@@ -367,29 +396,24 @@ cat("\nSpeedup: BiLSTM is", round(speedup, 1), "x FASTER than ABC\n")
 
 ```{r param-comparison}
 comparison_df <- data.frame(
-  Parameter = c("Contact Rate", "Trans. Prob", "Recovery Rate", "R0"),
+  Parameter = c("Contact Rate", "Recovery Rate", "Trans. Prob", "R0"),
   BiLSTM = c(
     lstm_predictions[["crate"]],
-    lstm_predictions[["ptran"]],
     recov,
+    lstm_predictions[["ptran"]],
     lstm_predictions[["R0"]]
   ),
-  ABC = c(
-    abc_crate,
-    abc_ptran,
-    abc_recov,
-    abc_R0
-  ),
+  ABC = c(abc_crate, abc_recov, abc_ptran, abc_R0),
   Difference = c(
     lstm_predictions[["crate"]] - abc_crate,
-    lstm_predictions[["ptran"]] - abc_ptran,
     recov - abc_recov,
+    lstm_predictions[["ptran"]] - abc_ptran,
     lstm_predictions[["R0"]] - abc_R0
   ),
   Pct_Diff = c(
     (lstm_predictions[["crate"]] - abc_crate) / abc_crate * 100,
-    (lstm_predictions[["ptran"]] - abc_ptran) / abc_ptran * 100,
     (recov - abc_recov) / abc_recov * 100,
+    (lstm_predictions[["ptran"]] - abc_ptran) / abc_ptran * 100,
     (lstm_predictions[["R0"]] - abc_R0) / abc_R0 * 100
   )
 )
@@ -541,14 +565,8 @@ knitr::kable(metrics_df,
              caption = "Model Performance Comparison")
 ```
 
-## Summary
+## Session Information
 
-This analysis demonstrates that:
-
-1.  **BiLSTM is significantly faster** than ABC calibration
-2.  **Both methods produce comparable accuracy** in terms of RMSE and MAE
-3.  **Uncertainty quantification** is similar between methods
-4.  **BiLSTM provides instant predictions** making it ideal for real-time applications
-5.  **ABC offers full Bayesian inference** with credible intervals for all parameters
-
-The choice between methods depends on the use case: BiLSTM for speed and operational deployment, ABC for comprehensive uncertainty quantification and parameter inference.
+```{r session-info}
+sessionInfo()
+```

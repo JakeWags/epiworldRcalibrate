@@ -91,7 +91,7 @@ cat("Mean daily cases:", round(mean(incidence), 1), "\n")
 ### Configuration
 
 ```{r config}
-N <- 30000      # Population size (BiLSTM)
+N <- 20000     # Population size (BiLSTM)
 recov <- 1 / 7  # Recovery rate (7-day infectious period)
 model_ndays <- 60  # Simulation days
 
@@ -172,36 +172,45 @@ bilstm_quantiles <- bilstm_transitions %>%
 ```
 
 ## Method 2: ABC Calibration
-
 ### Load Pre-Calibrated ABC Results
-
 ```{r abc-load-results}
 cat("\n=== ABC Calibration (Pre-computed) ===\n")
 
-# Extract calibrated parameters from package data
-abc_crate <- abc_calibration_results$abc_crate
-abc_recov <- abc_calibration_results$abc_recov
-abc_ptran <- abc_calibration_results$abc_ptran
-abc_R0 <- abc_calibration_results$abc_R0
+# Load the calibration data
+data("abc_calibration_params")
+
+# Extract calibrated parameters
+abc_crate <- abc_calibration_params$contact_rate
+abc_recov <- abc_calibration_params$recovery_rate
+abc_ptran <- abc_calibration_params$transmission_prob
+abc_R0 <- abc_calibration_params$R0
 
 # Extract confidence intervals
-abc_lower <- abc_calibration_results$abc_lower
-abc_upper <- abc_calibration_results$abc_upper
-abc_median <- abc_calibration_results$abc_median
+abc_lower <- c(
+  abc_calibration_params$contact_rate_ci["lower"],
+  abc_calibration_params$recovery_rate_ci["lower"],
+  abc_calibration_params$transmission_prob_ci["lower"]
+)
+abc_upper <- c(
+  abc_calibration_params$contact_rate_ci["upper"],
+  abc_calibration_params$recovery_rate_ci["upper"],
+  abc_calibration_params$transmission_prob_ci["upper"]
+)
+abc_median <- c(abc_crate, abc_recov, abc_ptran)
 
 # Get timing information
-abc_time_minutes <- abc_calibration_results$abc_time_elapsed / 60
+abc_time_minutes <- abc_calibration_params$calibration_time_seconds / 60
 
 # Get configuration
-N_abc <- abc_calibration_results$N
-recov_abc <- abc_calibration_results$recov
-n_samples_abc <- abc_calibration_results$n_samples
-burnin_abc <- abc_calibration_results$burnin
+N_abc <- 20000 # From your original configuration
+
+n_samples_abc <- abc_calibration_params$n_samples
+burnin_abc <- abc_calibration_params$burnin
 
 cat("ABC Configuration:\n")
 cat("Population size:", N_abc, "\n")
 cat("MCMC samples:", n_samples_abc, "(", burnin_abc, "burn-in)\n")
-cat("Epsilon:", round(abc_calibration_results$epsilon, 2), "\n")
+cat("Epsilon:", round(abc_calibration_params$epsilon, 2), "\n")
 cat("Original computation time:", round(abc_time_minutes, 2), "minutes\n\n")
 
 cat("Calibrated Parameters (Median with 95% CI):\n")
@@ -215,10 +224,9 @@ cat("R0:                ", sprintf("%.4f", abc_R0), "\n", sep = "")
 ```
 
 ### ABC Posterior Distributions
-
 ```{r abc-posterior, fig.width=12, fig.height=4}
 # Extract posterior samples
-posterior <- abc_calibration_results$post_burnin
+posterior <- abc_calibration_params$posterior_samples
 
 # Calculate R0 from posterior samples
 R0_samples <- (posterior[, 1] * posterior[, 3]) / posterior[, 2]
@@ -259,17 +267,15 @@ ggplot(posterior_long, aes(x = value)) +
 ```
 
 ### Stochastic Simulations (ABC)
-
 ```{r abc-simulations}
 cat("\n=== Running 2,000 Stochastic Simulations (ABC) ===\n")
 
 initial_infected <- incidence_vec[1]
-N_abc <- abc_calibration_results$N
-initial_prevalence <- initial_infected / N_abc
+initial_prevalence <- initial_infected / N
 
 abc_model <- ModelSIRCONN(
   name              = "ABC SIR",
-  n                 = N_abc,
+  n                 = N,
   prevalence        = initial_prevalence,
   contact_rate      = abc_crate,
   transmission_rate = abc_ptran,
@@ -294,6 +300,7 @@ abc_sim_results <- run_multiple_get_results(
   freader = data.table::fread
 )
 ```
+
 
 ### Extract ABC Confidence Intervals
 

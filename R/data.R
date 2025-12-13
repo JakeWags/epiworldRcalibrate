@@ -38,55 +38,36 @@
 #' }
 "utah_covid_data"
 
-#' ABC Calibration Results for Utah COVID-19 Data
+#' ABC Calibration Parameters for COVID-19 SIR Model
 #'
-#' Pre-computed ABC calibration results using 3000 MCMC samples with 1500 burn-in
-#' on Utah COVID-19 incidence data. These results are used in the vignettes to
-#' avoid computationally intensive calibration during package building.
+#' Results from ABC calibration of a SIR-CONN epidemic model fitted to
+#' Utah COVID-19 data using LFMCMC methods.
 #'
-#' @format A list with 17 elements:
+#' @format A list with 13 elements:
 #' \describe{
-#'   \item{abc_crate}{Calibrated contact rate (median)}
-#'   \item{abc_recov}{Calibrated recovery rate (median)}
-#'   \item{abc_ptran}{Calibrated transmission probability (median)}
-#'   \item{abc_R0}{Calculated basic reproduction number}
-#'   \item{abc_lower}{2.5\% quantiles for all parameters}
-#'   \item{abc_upper}{97.5\% quantiles for all parameters}
-#'   \item{abc_median}{Median values for all parameters}
-#'   \item{post_burnin}{Matrix of posterior samples after burn-in (1500 x 3)}
-#'   \item{abc_time_elapsed}{Computation time in seconds}
-#'   \item{n_samples}{Number of MCMC samples (3000)}
-#'   \item{burnin}{Number of burn-in samples (1500)}
+#'   \item{contact_rate}{Median calibrated contact rate}
+#'   \item{recovery_rate}{Median calibrated recovery rate}
+#'   \item{transmission_prob}{Median calibrated transmission probability}
+#'   \item{R0}{Basic reproduction number}
+#'   \item{contact_rate_ci}{95\% credible interval for contact rate}
+#'   \item{recovery_rate_ci}{95\% credible interval for recovery rate}
+#'   \item{transmission_prob_ci}{95\% credible interval for transmission probability}
+#'   \item{calibration_time_seconds}{Calibration time in seconds}
+#'   \item{n_samples}{Total MCMC samples (2000)}
+#'   \item{burnin}{Burn-in samples (1000)}
 #'   \item{epsilon}{ABC tolerance parameter}
-#'   \item{seed}{Random seed used (122)}
-#'   \item{N}{Population size (30000)}
-#'   \item{recov}{Recovery rate (1/7)}
-#'   \item{initial_prevalence}{Initial disease prevalence}
-#'   \item{model_ndays}{Simulation days (60)}
+#'   \item{seed}{Random seed (122)}
+#'   \item{posterior_samples}{Matrix of posterior samples (1000 × 3)}
 #' }
 #'
 #' @details
-#' This data object contains pre-computed results from an Approximate Bayesian
-#' Computation (ABC) calibration procedure applied to Utah COVID-19 incidence data.
-#' The calibration uses a Likelihood-Free Markov Chain Monte Carlo (LFMCMC)
-#' approach to estimate SIR model parameters.
-#'
-#' @source Generated using ABC-MCMC calibration on Utah COVID-19 data via
-#'   \code{data-raw/abc_calibration_results.R}
+#' Calibrated using last 61 days of Utah COVID-19 data with population N=30,000.
+#' Uses exponential kernel with epsilon = 5\% of observed incidence L2 norm.
 #'
 #' @examples
-#' \dontrun{
-#' # Load the ABC results
-#' data(abc_calibration_results)
+#' data(abc_calibration_params)
+#' abc_calibration_params$contact_rate
+#' abc_calibration_params$R0
 #'
-#' # View calibrated parameters
-#' abc_calibration_results$abc_crate
-#' abc_calibration_results$abc_ptran
-#' abc_calibration_results$abc_R0
-#'
-#' # View posterior distribution
-#' hist(abc_calibration_results$post_burnin[, 1],
-#'      main = "Posterior Distribution of Contact Rate",
-#'      xlab = "Contact Rate")
-#' }
-"abc_calibration_results"
+#' @source Calibrated from \code{\link{utah_covid_data}}
+"abc_calibration_params"
