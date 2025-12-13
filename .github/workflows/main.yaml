@@ -68,9 +68,28 @@ jobs:
       - name: Install package
         run: R CMD INSTALL .
 
-      - name: Build pkgdown site
+      - name: Verify Quarto installation
         run: |
-          Rscript -e 'pkgdown::build_site(new_process = FALSE, install = FALSE)'
+          quarto --version
+          quarto check
+
+      - name: Test render single vignette
+        run: |
+          cd vignettes
+          quarto render calibration_explanation.qmd --to html
+        continue-on-error: true
+
+      - name: Build pkgdown site with verbose output
+        run: |
+          Rscript -e '
+            options(pkgdown.internet = TRUE)
+            pkgdown::build_site(
+              new_process = FALSE,
+              install = FALSE,
+              preview = FALSE,
+              devel = FALSE
+            )
+          '
 
       - name: Upload Pages artifact
         if: github.ref == 'refs/heads/main'
