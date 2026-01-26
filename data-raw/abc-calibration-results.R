@@ -73,19 +73,19 @@ simulation_fun <- function(params, lfmcmc_obj, observed_data_info) {
   return(as.numeric(infected_counts))
 }
 
-# FIXED: Summary function now uses robust statistics instead of entire time series
+# CHANGED: Simpler, more stable summary statistics
 summary_fun <- function(data, lfmcmc_obj) {
   c(
-    mean(data),           # Overall mean
-    sd(data),             # Standard deviation
-    max(data),            # Peak size
-    which.max(data),      # Time to peak
-    sum(data),            # Total cases
-    median(data)          # Median for robustness
+    sum(data),                  # Total cases
+    max(data),                  # Peak height
+    which.max(data),            # Day of peak
+    mean(data[1:20]),           # Early phase mean
+    mean(data[21:40]),          # Middle phase mean
+    mean(data[41:60])           # Late phase mean
   )
 }
 
-# FIXED: Proposal function uses log transform for contact rate (no reflection needed)
+# Proposal function uses log transform for contact rate (no reflection needed)
 proposal_fun <- function(old_params, lfmcmc_obj) {
   # Contact rate: use log transform to ensure positivity
   new_crate <- exp(log(old_params[1]) + rnorm(1, sd = 0.1))
@@ -97,8 +97,11 @@ proposal_fun <- function(old_params, lfmcmc_obj) {
   return(c(new_crate, new_recov, new_ptran))
 }
 
+# CHANGED: Weighted kernel function to prevent any stat from dominating
 kernel_fun <- function(simulated_stat, observed_stat, epsilon, lfmcmc_obj) {
-  diff <- sum((simulated_stat - observed_stat)^2)
+  # Normalize each statistic by its observed value
+  weights <- 1 / (abs(observed_stat) + 1)
+  diff <- sum(weights * (simulated_stat - observed_stat)^2)
   return(exp(-diff / (2 * epsilon^2)))
 }
 
@@ -134,14 +137,15 @@ lfmcmc_obj <- set_kernel_fun(lfmcmc_obj, kernel_fun)
 
 # IMPORTANT: Apply summary function to observed data before setting it
 observed_summary_stats <- summary_fun(incidence_vec, NULL)
+cat("Observed summary statistics:", round(observed_summary_stats, 2), "\n")
 lfmcmc_obj <- set_observed_data(lfmcmc_obj, observed_summary_stats)
 
 init_params <- c(5, 1/7, 0.0571)
 n_samples_calib <- 3000
 burnin <- 1500
 
-# Adjust epsilon for summary statistics (not full time series)
-epsilon <- 100  # You may need to tune this
+# CHANGED: Lower epsilon since we're using weighted distance
+epsilon <- 10  # Reduced from 100
 
 cat("Running LFMCMC with", n_samples_calib, "samples (50% burn-in)...\n")
 cat("Using", length(observed_summary_stats), "summary statistics\n")
