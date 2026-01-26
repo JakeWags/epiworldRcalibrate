@@ -33,21 +33,17 @@ jobs:
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
 
+      # Delete lockfile on macOS to avoid corrupted bslib download
+      - name: Remove lockfile on macOS
+        if: runner.os == 'macOS'
+        run: rm -f .github/pkg.lock
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::rcmdcheck
           needs: check
-          cache: false
-        continue-on-error: true
-        id: deps
-
-      # If dependency installation failed, clear pak cache and retry
-      - name: Clear pak cache and retry (on failure)
-        if: steps.deps.outcome == 'failure'
-        run: |
-          Rscript -e "pak::cache_clean()"
-          Rscript -e "pak::pkg_install('bslib', ask = FALSE)"
-          Rscript -e "pak::lockfile_install('.github/pkg.lock')"
+          cache: ${{ runner.os != 'macOS' }}
+          cache-version: 2
 
       # ---------- Python + Torch (+extras) for reticulate (Ubuntu only) ----------
       - name: Set up Python for reticulate
