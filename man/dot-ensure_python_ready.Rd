@@ -2,11 +2,11 @@
 % Please edit documentation in R/calibrate_sir.R
 \name{.ensure_python_ready}
 \alias{.ensure_python_ready}
-\title{Ensure Python + necessary modules are ready}
+\title{Ensure Python + necessary modules are ready (FIXED VERSION)}
 \usage{
 .ensure_python_ready()
 }
 \description{
-Ensure Python + necessary modules are ready
+Ensure Python + necessary modules are ready (FIXED VERSION)
 }
 \keyword{internal}

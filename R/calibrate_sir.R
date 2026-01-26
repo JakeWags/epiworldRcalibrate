@@ -60,58 +60,171 @@
   return(NULL)
 }
 
-#' Ensure Python + necessary modules are ready
+#' Ensure Python + necessary modules are ready (FIXED VERSION)
 #' @keywords internal
 .ensure_python_ready <- function() {
 
+  # Step 1: Initialize Python
   user_py <- Sys.getenv("RETICULATE_PYTHON", unset = "")
   if (nzchar(user_py)) {
     message("Using user-specified Python: ", user_py)
+    if (!file.exists(user_py)) {
+      stop("RETICULATE_PYTHON points to non-existent file: ", user_py)
+    }
     reticulate::use_python(user_py, required = TRUE)
   } else {
     vname <- .bilstm_env$venv_name
     envs <- tryCatch(reticulate::virtualenv_list(), error = function(e) character())
+
     if (vname %in% envs) {
+      message("Using existing virtual environment: ", vname)
       reticulate::use_virtualenv(vname, required = FALSE)
     } else {
+      message("Creating new virtual environment: ", vname)
       python_path <- .find_python()
       if (is.null(python_path))
         stop("Could not find Python. Install Python 3.7+ or set RETICULATE_PYTHON.")
 
-      reticulate::virtualenv_create(vname, python = python_path)
-      reticulate::use_virtualenv(vname, required = FALSE)
+      message("Found Python at: ", python_path)
+
+      tryCatch({
+        reticulate::virtualenv_create(vname, python = python_path)
+        reticulate::use_virtualenv(vname, required = FALSE)
+      }, error = function(e) {
+        stop("Failed to create virtual environment: ", conditionMessage(e))
+      })
     }
   }
 
+  # Step 2: Verify Python is available
   if (!reticulate::py_available(initialize = TRUE))
-    stop("Python could not be initialized.")
+    stop("Python could not be initialized. Check your Python installation.")
 
-  needs <- c(
-    numpy = !reticulate::py_module_available("numpy"),
-    sklearn = !reticulate::py_module_available("sklearn"),
-    joblib = !reticulate::py_module_available("joblib"),
-    torch = !reticulate::py_module_available("torch")
+  # Step 3: Define required packages with proper names
+  required_packages <- list(
+    list(check_name = "numpy", install_name = "numpy", min_version = NULL),
+    list(check_name = "sklearn", install_name = "scikit-learn", min_version = NULL),
+    list(check_name = "joblib", install_name = "joblib", min_version = NULL),
+    list(check_name = "torch", install_name = "torch", min_version = NULL)
   )
 
-  if (any(needs)) {
-    pkgs <- names(needs)[needs]
-    pkgs[pkgs == "sklearn"] <- "scikit-learn"
+  # Step 4: Check what needs installation
+  needs_install <- character()
 
-    non_torch <- setdiff(pkgs, "torch")
-    if (length(non_torch)) reticulate::py_install(non_torch, pip = TRUE)
+  for (pkg in required_packages) {
+    available <- tryCatch({
+      reticulate::py_module_available(pkg$check_name)
+    }, error = function(e) FALSE)
 
-    if ("torch" %in% pkgs) {
-      reticulate::py_install(
-        "torch", pip = TRUE,
-        pip_options = c("--index-url", "https://download.pytorch.org/whl/cpu")
-      )
+    if (!available) {
+      message("Package '", pkg$check_name, "' not found, will install")
+      needs_install <- c(needs_install, pkg$install_name)
+    } else {
+      message("Package '", pkg$check_name, "' found")
     }
   }
 
-  critical <- c("numpy", "sklearn", "joblib", "torch")
-  missing <- critical[!sapply(critical, reticulate::py_module_available)]
-  if (length(missing))
-    stop("Missing Python modules: ", paste(missing, collapse = ", "))
+  # Step 5: Install missing packages
+  if (length(needs_install) > 0) {
+    message("Installing missing Python packages...")
+
+    # Install non-torch packages first
+    non_torch <- setdiff(needs_install, "torch")
+    if (length(non_torch) > 0) {
+      message("Installing: ", paste(non_torch, collapse = ", "))
+      tryCatch({
+        reticulate::py_install(non_torch, pip = TRUE)
+      }, error = function(e) {
+        stop("Failed to install packages ", paste(non_torch, collapse = ", "),
+             ": ", conditionMessage(e))
+      })
+    }
+
+    # Install PyTorch with CPU-only version
+    if ("torch" %in% needs_install) {
+      message("Installing PyTorch (CPU version)...")
+      tryCatch({
+        reticulate::py_install(
+          "torch",
+          pip = TRUE,
+          pip_options = c("--index-url", "https://download.pytorch.org/whl/cpu")
+        )
+      }, error = function(e) {
+        stop("Failed to install PyTorch: ", conditionMessage(e))
+      })
+    }
+  }
+
+  # Step 6: Verify all packages can be imported (not just available)
+  message("Verifying package installation...")
+
+  verification_code <- '
+import sys
+def verify_imports():
+    results = {}
+
+    # Test numpy
+    try:
+        import numpy
+        results["numpy"] = {"status": "ok", "version": numpy.__version__}
+    except Exception as e:
+        results["numpy"] = {"status": "error", "error": str(e)}
+
+    # Test sklearn
+    try:
+        import sklearn
+        results["sklearn"] = {"status": "ok", "version": sklearn.__version__}
+    except Exception as e:
+        results["sklearn"] = {"status": "error", "error": str(e)}
+
+    # Test joblib
+    try:
+        import joblib
+        results["joblib"] = {"status": "ok", "version": joblib.__version__}
+    except Exception as e:
+        results["joblib"] = {"status": "error", "error": str(e)}
+
+    # Test torch
+    try:
+        import torch
+        results["torch"] = {"status": "ok", "version": torch.__version__}
+    except Exception as e:
+        results["torch"] = {"status": "error", "error": str(e)}
+
+    return results
+
+verification_results = verify_imports()
+'
+
+  tryCatch({
+    reticulate::py_run_string(verification_code)
+    results <- reticulate::py$verification_results
+
+    # Check results
+    failed <- character()
+    for (pkg_name in names(results)) {
+      pkg_result <- results[[pkg_name]]
+      if (pkg_result$status == "ok") {
+        message("✓ ", pkg_name, " v", pkg_result$version, " loaded successfully")
+      } else {
+        failed <- c(failed, pkg_name)
+        message("✗ ", pkg_name, " failed: ", pkg_result$error)
+      }
+    }
+
+    if (length(failed) > 0) {
+      stop("Failed to import the following packages: ",
+           paste(failed, collapse = ", "),
+           ". Try reinstalling with: reticulate::py_install(c('",
+           paste(failed, collapse = "', '"), "'), pip = TRUE)")
+    }
+
+  }, error = function(e) {
+    stop("Package verification failed: ", conditionMessage(e))
+  })
+
+  message("All required Python packages are ready!")
+  invisible(TRUE)
 }
 
 # =============================================================================
@@ -392,6 +505,91 @@ check_model_status <- function() {
       error = function(e) NULL
     )
   )
+}
+
+#' Check Python and package installation status
+#'
+#' @return A list with Python installation details and package status
+#' @export
+check_python_setup <- function() {
+  result <- list(
+    python_available = FALSE,
+    python_path = NULL,
+    python_version = NULL,
+    virtualenv = NULL,
+    packages = list()
+  )
+
+  # Check if Python is available
+  result$python_available <- tryCatch({
+    reticulate::py_available(initialize = TRUE)
+  }, error = function(e) FALSE)
+
+  if (!result$python_available) {
+    message("Python is not available")
+    return(result)
+  }
+
+  # Get Python config
+  py_config <- tryCatch(reticulate::py_config(), error = function(e) NULL)
+  if (!is.null(py_config)) {
+    result$python_path <- py_config$python
+    result$python_version <- py_config$version
+    result$virtualenv <- py_config$virtualenv
+  }
+
+  # Check packages
+  packages <- c("numpy", "sklearn", "joblib", "torch")
+  for (pkg in packages) {
+    result$packages[[pkg]] <- list(
+      available = tryCatch(
+        reticulate::py_module_available(pkg),
+        error = function(e) FALSE
+      )
+    )
+
+    # Try to get version if available
+    if (result$packages[[pkg]]$available) {
+      version <- tryCatch({
+        reticulate::import(pkg)$`__version__`
+      }, error = function(e) "unknown")
+      result$packages[[pkg]]$version <- version
+    }
+  }
+
+  result
+}
+
+#' Reinstall all Python dependencies
+#'
+#' @param force Logical; if TRUE, removes and recreates the virtual environment
+#' @return Invisibly returns TRUE on success
+#' @export
+reinstall_python_deps <- function(force = FALSE) {
+  vname <- .bilstm_env$venv_name
+
+  if (force) {
+    message("Removing existing virtual environment...")
+    envs <- tryCatch(reticulate::virtualenv_list(), error = function(e) character())
+    if (vname %in% envs) {
+      reticulate::virtualenv_remove(vname, confirm = FALSE)
+    }
+  }
+
+  # Clean up current state
+  if (.bilstm_env$model_loaded) {
+    cleanup_model()
+  }
+
+  .bilstm_env$model_loaded <- FALSE
+  .bilstm_env$model_dir <- NULL
+
+  # Reinstall
+  message("Setting up Python environment...")
+  .ensure_python_ready()
+
+  message("Python dependencies reinstalled successfully!")
+  invisible(TRUE)
 }
 
 #' Unload the model from memory

@@ -2,6 +2,8 @@
 
 export(calibrate_sir)
 export(check_model_status)
+export(check_python_setup)
 export(cleanup_model)
 export(estimate_sir_parameters)
 export(init_bilstm_model)
+export(reinstall_python_deps)
