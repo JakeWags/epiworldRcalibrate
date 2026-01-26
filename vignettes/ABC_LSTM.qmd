@@ -279,7 +279,7 @@ abc_model <- ModelSIRCONN(
   prevalence        = initial_prevalence,
   contact_rate      = abc_crate,
   transmission_rate = abc_ptran,
-  recovery_rate     = abc_recov
+  recovery_rate     = recov
 )
 
 saver_abc <- make_saver("transition")
