@@ -33,19 +33,21 @@ jobs:
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
 
-      # For macOS: Clear pak cache before attempting installation
-      - name: Clear pak cache (macOS only)
-        if: runner.os == 'macOS'
-        run: |
-          Rscript -e "if (requireNamespace('pak', quietly = TRUE)) pak::cache_clean()"
-        continue-on-error: true
-
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::rcmdcheck
           needs: check
-          # Disable cache on macOS to avoid corrupted packages
           cache: false
+        continue-on-error: true
+        id: deps
+
+      # If dependency installation failed, clear pak cache and retry
+      - name: Clear pak cache and retry (on failure)
+        if: steps.deps.outcome == 'failure'
+        run: |
+          Rscript -e "pak::cache_clean()"
+          Rscript -e "pak::pkg_install('bslib', ask = FALSE)"
+          Rscript -e "pak::lockfile_install('.github/pkg.lock')"
 
       # ---------- Python + Torch (+extras) for reticulate (Ubuntu only) ----------
       - name: Set up Python for reticulate
