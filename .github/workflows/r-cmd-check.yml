@@ -1,4 +1,5 @@
 name: R-CMD-check
+
 on:
   push:
     branches: [main, master]
@@ -33,17 +34,10 @@ jobs:
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
 
-      # Delete lockfile on macOS to avoid corrupted bslib download
-      - name: Remove lockfile on macOS
-        if: runner.os == 'macOS'
-        run: rm -f .github/pkg.lock
-
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::rcmdcheck
           needs: check
-          cache: ${{ runner.os != 'macOS' }}
-          cache-version: 2
 
       # ---------- Python + Torch (+extras) for reticulate (Ubuntu only) ----------
       - name: Set up Python for reticulate
@@ -62,15 +56,15 @@ jobs:
       - name: Tell reticulate which Python to use
         if: runner.os == 'Linux'
         run: echo "RETICULATE_PYTHON=$(which python)" >> $GITHUB_ENV
-
       # --------------------------------------------------------------------------
+
       # Ubuntu release = full check WITH vignettes
       - name: Check package (Ubuntu release - with vignettes)
         if: runner.os == 'Linux' && matrix.config.r == 'release'
         uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true
-          error-on: '"error"'
+          error-on: '"error"'   # <-- ONLY fail on ERROR, not WARNING
 
       # All other OS/R combos = skip vignettes
       - name: Check package (other platforms - no vignettes)
@@ -80,11 +74,12 @@ jobs:
           build_args: 'c("--no-build-vignettes", "--no-manual")'
           args: 'c("--as-cran", "--no-manual", "--ignore-vignettes")'
           upload-snapshots: true
-          error-on: '"error"'
+          error-on: '"error"'   # <-- ONLY fail on ERROR
 
       # --------------------------------------------------------------------------
       # Build tarballs
       # --------------------------------------------------------------------------
+
       - name: Build tarball (Ubuntu release, with vignettes)
         if: runner.os == 'Linux' && matrix.config.r == 'release'
         run: R CMD build . --no-manual
