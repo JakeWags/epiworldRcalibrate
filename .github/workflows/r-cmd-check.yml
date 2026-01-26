@@ -34,6 +34,14 @@ jobs:
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
 
+      # -------------------- macOS: avoid pak cache/binary issues --------------------
+      - name: Force source installs on macOS (avoid pak binary cache issues)
+        if: runner.os == 'macOS'
+        run: |
+          echo "PAK_BUILD_FROM_SOURCE=true" >> $GITHUB_ENV
+          echo "PAK_NO_CACHE=true" >> $GITHUB_ENV
+      # ---------------------------------------------------------------------------
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::rcmdcheck
@@ -64,7 +72,7 @@ jobs:
         uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true
-          error-on: '"error"'   # <-- ONLY fail on ERROR, not WARNING
+          error-on: '"error"'   # fail only on ERROR, not WARNING
 
       # All other OS/R combos = skip vignettes
       - name: Check package (other platforms - no vignettes)
@@ -74,7 +82,7 @@ jobs:
           build_args: 'c("--no-build-vignettes", "--no-manual")'
           args: 'c("--as-cran", "--no-manual", "--ignore-vignettes")'
           upload-snapshots: true
-          error-on: '"error"'   # <-- ONLY fail on ERROR
+          error-on: '"error"'   # fail only on ERROR, not WARNING
 
       # --------------------------------------------------------------------------
       # Build tarballs
