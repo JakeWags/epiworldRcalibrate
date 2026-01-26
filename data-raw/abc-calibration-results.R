@@ -53,10 +53,9 @@ simulate_epidemic_calib <- function(params, ndays = model_ndays, seed = NULL) {
 
   verbose_off(sim_model)
   run(sim_model, ndays = ndays)
-
-  counts <- get_hist_total(sim_model)
-  infected_counts <- counts[counts$state == "Infected", "counts"]
-
+# Get daily incidence data instead of cumulative counts
+incidence_data <- plot_incidence(sim_model, plot = FALSE)
+infected_counts <- incidence_data$Infected
   return(infected_counts)
 }
 
