@@ -73,14 +73,26 @@ simulation_fun <- function(params, lfmcmc_obj, observed_data_info) {
   return(as.numeric(infected_counts))
 }
 
+# FIXED: Summary function now uses robust statistics instead of entire time series
 summary_fun <- function(data, lfmcmc_obj) {
-  return(as.numeric(data))
+  c(
+    mean(data),           # Overall mean
+    sd(data),             # Standard deviation
+    max(data),            # Peak size
+    which.max(data),      # Time to peak
+    sum(data),            # Total cases
+    median(data)          # Median for robustness
+  )
 }
 
+# FIXED: Proposal function uses log transform for contact rate (no reflection needed)
 proposal_fun <- function(old_params, lfmcmc_obj) {
-  new_crate <- old_params[1] * exp(rnorm(1, sd = 0.1))
-  new_recov <- plogis(qlogis(old_params[2]) + rnorm(1, sd = 0.1))
-  new_ptran <- plogis(qlogis(old_params[3]) + rnorm(1, sd = 0.1))
+  # Contact rate: use log transform to ensure positivity
+  new_crate <- exp(log(old_params[1]) + rnorm(1, sd = 0.1))
+
+  # Recovery and transmission rates: use logit transform (bounded [0,1])
+  new_recov <- plogis(qlogis(old_params[2]) + rnorm(1, sd = 0.025))
+  new_ptran <- plogis(qlogis(old_params[3]) + rnorm(1, sd = 0.025))
 
   return(c(new_crate, new_recov, new_ptran))
 }
@@ -119,14 +131,21 @@ lfmcmc_obj <- set_simulation_fun(lfmcmc_obj, local_simulation_fun)
 lfmcmc_obj <- set_summary_fun(lfmcmc_obj, summary_fun)
 lfmcmc_obj <- set_proposal_fun(lfmcmc_obj, proposal_fun)
 lfmcmc_obj <- set_kernel_fun(lfmcmc_obj, kernel_fun)
-lfmcmc_obj <- set_observed_data(lfmcmc_obj, incidence_vec)
+
+# IMPORTANT: Apply summary function to observed data before setting it
+observed_summary_stats <- summary_fun(incidence_vec, NULL)
+lfmcmc_obj <- set_observed_data(lfmcmc_obj, observed_summary_stats)
 
 init_params <- c(5, 1/7, 0.0571)
 n_samples_calib <- 3000
 burnin <- 1500
-epsilon <- sqrt(sum(incidence_vec^2)) * 0.05
+
+# Adjust epsilon for summary statistics (not full time series)
+epsilon <- 100  # You may need to tune this
 
 cat("Running LFMCMC with", n_samples_calib, "samples (50% burn-in)...\n")
+cat("Using", length(observed_summary_stats), "summary statistics\n")
+cat("Epsilon:", epsilon, "\n\n")
 
 tic("ABC calibration")
 run_lfmcmc(
@@ -143,6 +162,10 @@ abc_calibration_time <- abc_time_output$toc - abc_time_output$tic
 
 # Process Results ----------------------------------------------------------
 accepted <- get_all_accepted_params(lfmcmc_obj)
+acceptance_rate <- nrow(accepted) / n_samples_calib * 100
+
+cat("\nAcceptance rate:", round(acceptance_rate, 2), "%\n")
+
 post_burnin <- tail(accepted, n = (n_samples_calib - burnin))
 
 abc_median <- apply(post_burnin, 2, median)
@@ -177,7 +200,8 @@ abc_calibration_params <- list(
   burnin = burnin,
   epsilon = epsilon,
   seed = model_seed,
-  posterior_samples = post_burnin
+  posterior_samples = post_burnin,
+  acceptance_rate = acceptance_rate
 )
 
 # Save to data folder
@@ -185,3 +209,4 @@ usethis::use_data(abc_calibration_params, overwrite = TRUE)
 
 cat("\n✓ Saved abc_calibration_params to data/abc_calibration_params.rda\n")
 cat("  Calibration time:", round(abc_calibration_time, 2), "seconds\n")
+cat("  Acceptance rate:", round(acceptance_rate, 2), "%\n")

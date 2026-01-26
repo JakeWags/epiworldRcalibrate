@@ -1,5 +1,4 @@
 name: R-CMD-check
-
 on:
   push:
     branches: [main, master]
@@ -35,13 +34,21 @@ jobs:
           use-public-rspm: true
 
       - uses: r-lib/actions/setup-r-dependencies@v2
+        id: deps
         with:
           extra-packages: any::rcmdcheck
           needs: check
-          # Avoid restoring/saving a potentially broken cache on macOS
           cache: ${{ runner.os != 'macOS' }}
-          # If you re-enable cache later, this forces a fresh cache namespace
           cache-version: 2
+        continue-on-error: ${{ runner.os == 'macOS' }}
+
+      - name: Retry dependency installation (macOS only)
+        if: runner.os == 'macOS' && steps.deps.outcome == 'failure'
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+          cache: false
 
       # ---------- Python + Torch (+extras) for reticulate (Ubuntu only) ----------
       - name: Set up Python for reticulate
@@ -60,8 +67,8 @@ jobs:
       - name: Tell reticulate which Python to use
         if: runner.os == 'Linux'
         run: echo "RETICULATE_PYTHON=$(which python)" >> $GITHUB_ENV
-      # --------------------------------------------------------------------------
 
+      # --------------------------------------------------------------------------
       # Ubuntu release = full check WITH vignettes
       - name: Check package (Ubuntu release - with vignettes)
         if: runner.os == 'Linux' && matrix.config.r == 'release'
