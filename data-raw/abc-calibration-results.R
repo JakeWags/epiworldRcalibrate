@@ -54,8 +54,8 @@ simulate_epidemic_calib <- function(params, ndays = model_ndays, seed = NULL) {
   verbose_off(sim_model)
   run(sim_model, ndays = ndays)
 # Get daily incidence data instead of cumulative counts
-incidence_data <- plot_incidence(sim_model, plot = FALSE)
-infected_counts <- incidence_data$Infected
+  incidence_data <- plot_incidence(sim_model, plot = FALSE)
+  infected_counts <- incidence_data$Infected
   return(infected_counts)
 }
 
@@ -137,11 +137,11 @@ lfmcmc_obj <- set_kernel_fun(lfmcmc_obj, kernel_fun)
 # IMPORTANT: Apply summary function to observed data before setting it
 observed_summary_stats <- summary_fun(incidence_vec, NULL)
 cat("Observed summary statistics:", round(observed_summary_stats, 2), "\n")
-lfmcmc_obj <- set_observed_data(lfmcmc_obj, observed_summary_stats)
+lfmcmc_obj <- set_observed_data(lfmcmc_obj, incidence_vec)
 
 init_params <- c(5, 1/7, 0.0571)
-n_samples_calib <- 3000
-burnin <- 1500
+n_samples_calib <- 1000
+burnin <- 500
 
 # CHANGED: Lower epsilon since we're using weighted distance
 epsilon <- 10  # Reduced from 100
