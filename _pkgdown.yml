@@ -8,8 +8,8 @@ template:
 build:
   new_process: false
 
-vignettes:
-  strip_header: false
+# Tell pkgdown NOT to build articles from vignettes
+articles: false
 
 navbar:
   title: "epiworldRcalibrate"
@@ -40,14 +40,6 @@ home:
 authors:
   sima-njf:
     href: "https://github.com/sima-njf"
-
-articles:
-  - title: "Getting Started"
-    navbar: ~
-    contents:
-      - calibration_explanation
-      - Real_data
-      - ABC_LSTM
 
 footer:
   structure:
