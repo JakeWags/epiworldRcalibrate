@@ -5,6 +5,9 @@ template:
   bslib:
     preset: bootstrap
 
+build:
+  new_process: false
+
 navbar:
   title: "epiworldRcalibrate"
   left:
