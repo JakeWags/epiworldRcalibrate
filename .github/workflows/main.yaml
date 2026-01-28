@@ -83,45 +83,41 @@ jobs:
             cat("Python path:", reticulate::py_config()$python, "\n")
           '
 
-      - name: Build vignettes and copy to inst/doc
+      - name: Render calibration_explanation vignette only
         run: |
           Rscript -e '
             reticulate::use_python(Sys.which("python"), required = TRUE)
 
-            # Render all .qmd vignettes
-            vignette_files <- list.files("vignettes", pattern = "\\.qmd$", full.names = TRUE)
-            message("Found vignettes: ", paste(basename(vignette_files), collapse = ", "))
+            # Only render calibration_explanation.qmd
+            explanation_file <- "vignettes/calibration_explanation.qmd"
 
-            for (f in vignette_files) {
-              message("Rendering: ", f)
-              quarto::quarto_render(f)
+            if (file.exists(explanation_file)) {
+              message("Rendering: ", explanation_file)
+              quarto::quarto_render(explanation_file)
+            } else {
+              stop("calibration_explanation.qmd not found!")
             }
 
             # Create inst/doc directory
             dir.create("inst/doc", recursive = TRUE, showWarnings = FALSE)
 
-            # Copy HTML files
-            html_files <- list.files("vignettes", pattern = "\\.html$", full.names = TRUE)
-            if (length(html_files) > 0) {
-              file.copy(html_files, "inst/doc/", overwrite = TRUE)
-              message("Copied HTML files: ", paste(basename(html_files), collapse = ", "))
+            # Copy the rendered HTML
+            if (file.exists("vignettes/calibration_explanation.html")) {
+              file.copy("vignettes/calibration_explanation.html", "inst/doc/", overwrite = TRUE)
+              message("Copied calibration_explanation.html")
             }
 
-            # Copy QMD source files
-            qmd_files <- list.files("vignettes", pattern = "\\.qmd$", full.names = TRUE)
-            if (length(qmd_files) > 0) {
-              file.copy(qmd_files, "inst/doc/", overwrite = TRUE)
-              message("Copied QMD files: ", paste(basename(qmd_files), collapse = ", "))
+            # Copy the source QMD
+            if (file.exists(explanation_file)) {
+              file.copy(explanation_file, "inst/doc/", overwrite = TRUE)
+              message("Copied calibration_explanation.qmd")
             }
 
-            # Copy supporting files directories if they exist
-            file_dirs <- list.files("vignettes", pattern = "_files$", full.names = TRUE)
-            if (length(file_dirs) > 0) {
-              for (d in file_dirs) {
-                dir.create(file.path("inst/doc", basename(d)), recursive = TRUE, showWarnings = FALSE)
-                file.copy(d, "inst/doc/", recursive = TRUE, overwrite = TRUE)
-              }
-              message("Copied supporting directories: ", paste(basename(file_dirs), collapse = ", "))
+            # Copy supporting files if they exist
+            if (dir.exists("vignettes/calibration_explanation_files")) {
+              dir.create("inst/doc/calibration_explanation_files", recursive = TRUE, showWarnings = FALSE)
+              file.copy("vignettes/calibration_explanation_files", "inst/doc/", recursive = TRUE, overwrite = TRUE)
+              message("Copied supporting files")
             }
           '
 
