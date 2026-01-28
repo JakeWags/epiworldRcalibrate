@@ -25,19 +25,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install numpy tensorflow keras
-
-      - name: Setup Quarto
-        uses: quarto-dev/quarto-actions/setup@v2
-
       - name: Setup Pandoc
         uses: r-lib/actions/setup-pandoc@v2
 
@@ -63,63 +50,7 @@ jobs:
         with:
           extra-packages: |
             any::pkgdown
-            any::knitr
-            any::rmarkdown
-            any::quarto
-            any::tidyverse
-            any::ggplot2
-            any::epiworldR
-            any::tictoc
-            any::data.table
-            any::dplyr
-            any::tidyr
-            any::reticulate
           needs: website
-
-      - name: Configure reticulate
-        run: |
-          Rscript -e '
-            reticulate::use_python(Sys.which("python"), required = TRUE)
-            cat("Python path:", reticulate::py_config()$python, "\n")
-          '
-
-      - name: Render calibration_explanation vignette only
-        run: |
-          Rscript -e '
-            reticulate::use_python(Sys.which("python"), required = TRUE)
-
-            # Only render calibration_explanation.qmd
-            explanation_file <- "vignettes/calibration_explanation.qmd"
-
-            if (file.exists(explanation_file)) {
-              message("Rendering: ", explanation_file)
-              quarto::quarto_render(explanation_file)
-            } else {
-              stop("calibration_explanation.qmd not found!")
-            }
-
-            # Create inst/doc directory
-            dir.create("inst/doc", recursive = TRUE, showWarnings = FALSE)
-
-            # Copy the rendered HTML
-            if (file.exists("vignettes/calibration_explanation.html")) {
-              file.copy("vignettes/calibration_explanation.html", "inst/doc/", overwrite = TRUE)
-              message("Copied calibration_explanation.html")
-            }
-
-            # Copy the source QMD
-            if (file.exists(explanation_file)) {
-              file.copy(explanation_file, "inst/doc/", overwrite = TRUE)
-              message("Copied calibration_explanation.qmd")
-            }
-
-            # Copy supporting files if they exist
-            if (dir.exists("vignettes/calibration_explanation_files")) {
-              dir.create("inst/doc/calibration_explanation_files", recursive = TRUE, showWarnings = FALSE)
-              file.copy("vignettes/calibration_explanation_files", "inst/doc/", recursive = TRUE, overwrite = TRUE)
-              message("Copied supporting files")
-            }
-          '
 
       - name: Install package
         run: R CMD INSTALL .

@@ -8,6 +8,9 @@ template:
 build:
   new_process: false
 
+vignettes:
+  strip_header: false
+
 navbar:
   title: "epiworldRcalibrate"
   left:
