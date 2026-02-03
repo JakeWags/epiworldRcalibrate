@@ -1,73 +1,53 @@
-#' Utah COVID-19 Data
+#' Utah COVID-19 epidemic trends
 #'
-#' A dataset containing COVID-19 trends and epidemic data for Utah,
-#' downloaded from the Utah Coronavirus Dashboard.
+#' Daily COVID-19 epidemic indicators for the state of Utah, obtained from the
+#' Utah Department of Health COVID-19 dashboard.
 #'
-#' @format A data frame with the following columns:
+#' @docType data
+#' @format A data frame with 365 rows and 5 variables:
 #' \describe{
-#'   \item{Date}{Date of observation (Date class)}
-#'   \item{Daily.Cases}{Number of daily COVID-19 cases (numeric)}
-#'   \item{...}{Additional columns from the Utah COVID-19 trends data}
+#'   \item{Date}{Date of the observation (Date).}
+#'   \item{Daily.Cases}{Number of newly reported COVID-19 cases (numeric).}
+#'   \item{Smoothed.3.Day.Moving.Average}{Smoothed daily cases using a 3-day moving average (numeric).}
+#'   \item{X3.Day.Moving.Average}{Alternative 3-day moving average of daily cases (numeric).}
+#'   \item{Status}{Indicator of reporting or epidemic status (character or factor).}
 #' }
 #'
-#' @source Utah Coronavirus Dashboard
-#'   \url{https://coronavirus-dashboard.utah.gov/}
+#' @source
+#' Utah Department of Health COVID-19 Dashboard:
+#' \url{https://coronavirus-dashboard.utah.gov/}
 #'
-#' @details
-#' This dataset is extracted from the "Trends_Epidemic" file within the
-#' Utah COVID-19 data ZIP archive. The data includes the most recent
-#' period of observations as specified during data preparation.
-#'
-#' The data is processed to:
-#' \itemize{
-#'   \item Convert dates to Date class
-#'   \item Filter to recent observations
-#'   \item Arrange chronologically by date
-#' }
-#'
-#' @examples
-#' \dontrun{
-#' # Load the data
-#' data(utah_covid_data)
-#'
-#' # View structure
-#' str(utah_covid_data)
-#'
-#' # Plot daily cases
-#' plot(utah_covid_data$Date, utah_covid_data$Daily.Cases, type = "l")
-#' }
+#' @keywords datasets
 "utah_covid_data"
 
-#' ABC Calibration Parameters for COVID-19 SIR Model
+
+#' ABC calibration results for COVID-19 SIR model
 #'
-#' Results from ABC calibration of a SIR-CONN epidemic model fitted to
-#' Utah COVID-19 data using LFMCMC methods.
+#' Results from Approximate Bayesian Computation (ABC) calibration of an
+#' SIR network model fitted to Utah COVID-19 incidence data.
 #'
-#' @format A list with 13 elements:
+#' @docType data
+#' @format A named list with the following elements:
 #' \describe{
-#'   \item{contact_rate}{Median calibrated contact rate}
-#'   \item{recovery_rate}{Median calibrated recovery rate}
-#'   \item{transmission_prob}{Median calibrated transmission probability}
-#'   \item{R0}{Basic reproduction number}
-#'   \item{contact_rate_ci}{95\% credible interval for contact rate}
-#'   \item{recovery_rate_ci}{95\% credible interval for recovery rate}
-#'   \item{transmission_prob_ci}{95\% credible interval for transmission probability}
-#'   \item{calibration_time_seconds}{Calibration time in seconds}
-#'   \item{n_samples}{Total MCMC samples (2000)}
-#'   \item{burnin}{Burn-in samples (1000)}
-#'   \item{epsilon}{ABC tolerance parameter}
-#'   \item{seed}{Random seed (122)}
-#'   \item{posterior_samples}{Matrix of posterior samples (1000 × 3)}
+#'   \item{contact_rate}{Posterior median of the contact rate.}
+#'   \item{recovery_rate}{Posterior median of the recovery rate.}
+#'   \item{transmission_prob}{Posterior median of the transmission probability.}
+#'   \item{R0}{Basic reproduction number computed from posterior medians.}
+#'   \item{contact_rate_ci}{95 percent credible interval for the contact rate.}
+#'   \item{recovery_rate_ci}{95 percent credible interval for the recovery rate.}
+#'   \item{transmission_prob_ci}{95 percent credible interval for the transmission probability.}
+#'   \item{calibration_time_seconds}{Total runtime of the ABC calibration (seconds).}
+#'   \item{n_samples}{Number of MCMC samples used in calibration.}
+#'   \item{burnin}{Number of burn-in iterations discarded.}
+#'   \item{epsilon}{ABC tolerance parameter.}
+#'   \item{seed}{Random seed used for reproducibility.}
+#'   \item{posterior_samples}{Matrix of post-burn-in accepted parameter samples.}
+#'   \item{acceptance_rate}{Acceptance rate of the ABC-MCMC algorithm (percent).}
 #' }
 #'
-#' @details
-#' Calibrated using last 61 days of Utah COVID-19 data with population N=30,000.
-#' Uses exponential kernel with epsilon = 5\% of observed incidence L2 norm.
+#' @source
+#' Generated internally using the script
+#' \code{data-raw/process_covid_calibration.R}.
 #'
-#' @examples
-#' data(abc_calibration_params)
-#' abc_calibration_params$contact_rate
-#' abc_calibration_params$R0
-#'
-#' @source Calibrated from \code{\link{utah_covid_data}}
+#' @keywords datasets
 "abc_calibration_params"
