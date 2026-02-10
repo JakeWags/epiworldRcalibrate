@@ -14,12 +14,14 @@
 #' }
 #'
 #' @source
-#' Utah Department of Health COVID-19 Dashboard:
-#' \url{https://coronavirus-dashboard.utah.gov/}
+#' Utah Department of Health COVID-19 Dashboard.
+#'
+#' @examples
+#' data("utah_covid_data")
+#' head(utah_covid_data)
 #'
 #' @keywords datasets
 "utah_covid_data"
-
 
 #' ABC calibration results for COVID-19 SIR model
 #'
@@ -48,6 +50,10 @@
 #' @source
 #' Generated internally using the script
 #' \code{data-raw/process_covid_calibration.R}.
+#'
+#' @examples
+#' data("abc_calibration_params")
+#' str(abc_calibration_params)
 #'
 #' @keywords datasets
 "abc_calibration_params"

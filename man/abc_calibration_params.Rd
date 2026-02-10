@@ -34,4 +34,9 @@ abc_calibration_params
 Results from Approximate Bayesian Computation (ABC) calibration of an
 SIR network model fitted to Utah COVID-19 incidence data.
 }
+\examples{
+data("abc_calibration_params")
+str(abc_calibration_params)
+
+}
 \keyword{datasets}

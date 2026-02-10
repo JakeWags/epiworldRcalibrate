@@ -15,8 +15,7 @@ A data frame with 365 rows and 5 variables:
 }
 }
 \source{
-Utah Department of Health COVID-19 Dashboard:
-\url{https://coronavirus-dashboard.utah.gov/}
+Utah Department of Health COVID-19 Dashboard.
 }
 \usage{
 utah_covid_data
@@ -24,5 +23,10 @@ utah_covid_data
 \description{
 Daily COVID-19 epidemic indicators for the state of Utah, obtained from the
 Utah Department of Health COVID-19 dashboard.
+}
+\examples{
+data("utah_covid_data")
+head(utah_covid_data)
+
 }
 \keyword{datasets}
