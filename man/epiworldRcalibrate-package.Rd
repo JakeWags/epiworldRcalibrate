@@ -6,7 +6,7 @@
 \alias{epiworldRcalibrate-package}
 \title{epiworldRcalibrate: Fast and Effortless Calibration of Agent-Based Models using Machine Learning}
 \description{
-The 'epiworldRcalibrate' package provides tools and pre-trained Machine Learning [ML] models for calibration of Agent-Based Models [ABMs] built with the R package 'epiworldR'. It implements methods described in Najafzadehkhoei, Vega Yon, Modenesi, and Meyer (2025) \doi{10.48550/arXiv.2509.07013}. Using 'epiworldRcalibrate', users can automatically calibrate ABMs in seconds with its pre-trained ML models, effectively focusing on simulation rather than calibration. This tool bridges a gap by allowing public health practitioners to run their own ABMs without the advanced technical expertise often required by calibration.
+Provides tools and pre-trained Machine Learning [ML] models for calibration of Agent-Based Models [ABMs] built with the R package 'epiworldR'. Implements methods described in Najafzadehkhoei, Vega Yon, Modenesi, and Meyer (2025) \doi{10.48550/arXiv.2509.07013}. Users can automatically calibrate ABMs in seconds with pre-trained ML models, effectively focusing on simulation rather than calibration. Bridges a gap by allowing public health practitioners to run their own ABMs without the advanced technical expertise often required by calibration.
 }
 \seealso{
 Useful links:
