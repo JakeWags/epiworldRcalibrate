@@ -16,5 +16,7 @@ package's bundled model files.}
 Invisibly returns \code{TRUE} on success.
 }
 \description{
-Initialize BiLSTM Model for SIR Parameter Estimation
+Loads the trained BiLSTM model and associated scaler objects into memory.
+Requires that Python dependencies have been set up via
+\code{\link{setup_python_deps}}.
 }

@@ -7,8 +7,9 @@
 check_python_setup()
 }
 \value{
-A list with Python installation details and package status
+A list with Python installation details and package status.
 }
 \description{
-Check Python and package installation status
+Reports whether Python is available, which virtual environment is in use,
+and whether each required Python package is importable.
 }

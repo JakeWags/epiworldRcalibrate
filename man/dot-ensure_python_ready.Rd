@@ -2,11 +2,14 @@
 % Please edit documentation in R/calibrate_sir.R
 \name{.ensure_python_ready}
 \alias{.ensure_python_ready}
-\title{Ensure Python + necessary modules are ready (FIXED VERSION)}
+\title{Ensure Python + necessary modules are ready (no auto-install)}
 \usage{
 .ensure_python_ready()
 }
 \description{
-Ensure Python + necessary modules are ready (FIXED VERSION)
+This function checks that Python is available and that required packages
+are importable. It does NOT install any packages automatically. If packages
+are missing, it stops with an informative message directing the user to
+\code{\link{setup_python_deps}}.
 }
 \keyword{internal}

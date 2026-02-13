@@ -2,7 +2,7 @@
 % Please edit documentation in R/calibrate_sir.R
 \name{calibrate_sir}
 \alias{calibrate_sir}
-\title{Calibrate SIR Parameters (one-step)}
+\title{Calibrate SIR Parameters (one-step convenience wrapper)}
 \usage{
 calibrate_sir(
   daily_cases,
@@ -21,16 +21,16 @@ counts (day 0 to day 60).}
 \item{recovery_rate}{Single numeric value giving the recovery rate parameter.}
 
 \item{model_dir}{Optional path to the directory containing the trained
-BiLSTM model and scaler files. If \code{NULL}, the package's bundled assets
-are used.}
+BiLSTM model and scaler files. If \code{NULL}, the package's bundled
+assets are used.}
 
 \item{auto_init}{Logical; if \code{TRUE} (default), automatically calls
-\code{\link[=init_bilstm_model]{init_bilstm_model()}} when the model is not yet loaded.}
+\code{\link{init_bilstm_model}} when the model is not yet loaded.}
 }
 \value{
 Named numeric vector: \code{ptran}, \code{crate}, \code{R0}.
 }
 \description{
-This is a convenience wrapper that optionally initializes the BiLSTM model
-and then calls \code{\link[=estimate_sir_parameters]{estimate_sir_parameters()}} on the provided data.
+Optionally initializes the BiLSTM model and then calls
+\code{\link{estimate_sir_parameters}} on the provided data.
 }
