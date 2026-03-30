@@ -83,13 +83,38 @@
 .ensure_python_ready <- function() {
 
   # Step 1: Initialize Python
-  user_py <- Sys.getenv("RETICULATE_PYTHON", unset = "")
-  if (nzchar(user_py)) {
-    message("Using user-specified Python: ", user_py)
-    if (!file.exists(user_py)) {
-      stop("RETICULATE_PYTHON points to non-existent file: ", user_py)
+  active_initialized <- tryCatch(reticulate::py_available(initialize = FALSE),
+                                 error = function(e) FALSE)
+
+  if (active_initialized) {
+    active_py <- tryCatch(reticulate::py_config()$python,
+                          error = function(e) NULL)
+    if (!is.null(active_py) && nzchar(active_py)) {
+      message("Using active Python session: ", active_py)
     }
-    reticulate::use_python(user_py, required = TRUE)
+
+    # Ensure the active Python is the package virtualenv if it exists
+    vname <- .bilstm_env$venv_name
+    envs <- tryCatch(reticulate::virtualenv_list(),
+                     error = function(e) character())
+    if (vname %in% envs) {
+      venv_python <- tryCatch(reticulate::virtualenv_python(vname),
+                              error = function(e) NULL)
+      if (!is.null(venv_python) && nzchar(venv_python) && file.exists(venv_python)) {
+        active_py_norm <- tryCatch(normalizePath(active_py, winslash = "/", mustWork = TRUE),
+                                   error = function(e) active_py)
+        venv_py_norm <- tryCatch(normalizePath(venv_python, winslash = "/", mustWork = TRUE),
+                                 error = function(e) venv_python)
+        if (!identical(active_py_norm, venv_py_norm)) {
+          stop(
+            "Python was already initialized with a different interpreter (", active_py_norm, ").\n",
+            "The package requires the virtual environment '", vname, "' at ", venv_py_norm, ".\n",
+            "Please restart R and run epiworldRcalibrate::setup_python_deps() first.",
+            call. = FALSE
+          )
+        }
+      }
+    }
   } else {
     vname <- .bilstm_env$venv_name
     envs <- tryCatch(reticulate::virtualenv_list(),
@@ -97,21 +122,41 @@
 
     if (vname %in% envs) {
       message("Using existing virtual environment: ", vname)
-      reticulate::use_virtualenv(vname, required = FALSE)
-    } else {
-      # Do NOT create a virtualenv here — just use whatever Python is found
-      python_path <- .find_python()
-      if (is.null(python_path)) {
-        stop(
-          "Could not find a Python installation.\n",
-          "Please install Python 3.7+ and then run:\n",
-          "  epiworldRcalibrate::setup_python_deps()\n",
-          "Or set the RETICULATE_PYTHON environment variable to your ",
-          "Python path.",
-          call. = FALSE
-        )
+      venv_python <- tryCatch(reticulate::virtualenv_python(vname),
+                              error = function(e) NULL)
+      if (!is.null(venv_python) && nzchar(venv_python) && file.exists(venv_python)) {
+        current_reticulate_python <- Sys.getenv("RETICULATE_PYTHON", unset = "")
+        if (!identical(current_reticulate_python, venv_python)) {
+          Sys.setenv(RETICULATE_PYTHON = venv_python)
+          message("Using package virtualenv Python for this session: ", venv_python)
+        }
+        reticulate::use_python(venv_python, required = FALSE)
+      } else {
+        reticulate::use_virtualenv(vname, required = FALSE)
       }
-      reticulate::use_python(python_path, required = FALSE)
+    } else {
+      user_py <- Sys.getenv("RETICULATE_PYTHON", unset = "")
+      if (nzchar(user_py)) {
+        message("Using user-specified Python: ", user_py)
+        if (!file.exists(user_py)) {
+          stop("RETICULATE_PYTHON points to non-existent file: ", user_py)
+        }
+        reticulate::use_python(user_py, required = TRUE)
+      } else {
+        # Do NOT create a virtualenv here — just use whatever Python is found
+        python_path <- .find_python()
+        if (is.null(python_path)) {
+          stop(
+            "Could not find a Python installation.\n",
+            "Please install Python 3.7+ and then run:\n",
+            "  epiworldRcalibrate::setup_python_deps()\n",
+            "Or set the RETICULATE_PYTHON environment variable to your ",
+            "Python path.",
+            call. = FALSE
+          )
+        }
+        reticulate::use_python(python_path, required = FALSE)
+      }
     }
   }
 
@@ -524,13 +569,49 @@ def cleanup_model():
 .verify_python_imports <- function(python_bin = NULL,
                                    modules = .required_python_modules()) {
   if (!is.null(python_bin) && nzchar(python_bin) && file.exists(python_bin)) {
-    if (!tryCatch(reticulate::py_available(initialize = FALSE),
-                  error = function(e) FALSE)) {
-      tryCatch(
-        reticulate::use_python(python_bin, required = FALSE),
-        error = function(e) NULL
+    details <- setNames(vector("list", length(modules)), modules)
+    failed <- character()
+
+    for (mod in modules) {
+      code_lines <- c(
+        "import importlib",
+        sprintf("module_name = %s", shQuote(mod, type = "sh")),
+        "try:",
+        "    m = importlib.import_module(module_name)",
+        "    v = getattr(m, '__version__', 'unknown')",
+        "    print('OK||' + str(v))",
+        "except Exception as e:",
+        "    print('ERROR||' + str(e))"
       )
+
+      res <- .run_python_script(python_bin, code_lines, timeout_sec = 60)
+
+      if (!identical(res$status, 0L) || length(res$stdout) == 0) {
+        failed <- c(failed, mod)
+        err <- if (length(res$stderr)) paste(res$stderr, collapse = "\n") else "Execution failed"
+        details[[mod]] <- list(status = "error", error = err)
+        next
+      }
+
+      payload <- res$stdout[length(res$stdout)]
+
+      if (!startsWith(payload, "OK||")) {
+        failed <- c(failed, mod)
+        err <- if (startsWith(payload, "ERROR||")) {
+          sub("^ERROR\\|\\|", "", payload)
+        } else {
+          "Import failed"
+        }
+        details[[mod]] <- list(status = "error", error = err)
+      } else {
+        details[[mod]] <- list(
+          status = "ok",
+          version = sub("^OK\\|\\|", "", payload)
+        )
+      }
     }
+
+    return(list(ok = length(failed) == 0, failed = failed, details = details))
   }
 
   if (!tryCatch(reticulate::py_available(initialize = TRUE),
@@ -725,6 +806,16 @@ setup_python_deps <- function(force = FALSE) {
     )
   }
 
+  venv_python <- tryCatch(reticulate::virtualenv_python(vname),
+                          error = function(e) NULL)
+  if (!is.null(venv_python) && nzchar(venv_python) && file.exists(venv_python)) {
+    current_reticulate_python <- Sys.getenv("RETICULATE_PYTHON", unset = "")
+    if (!identical(current_reticulate_python, venv_python)) {
+      Sys.setenv(RETICULATE_PYTHON = venv_python)
+      message("Using package virtualenv Python for this session: ", venv_python)
+    }
+  }
+
   # Bind reticulate to the package virtualenv for this session
   tryCatch({
     reticulate::use_virtualenv(vname, required = TRUE)
@@ -747,6 +838,7 @@ setup_python_deps <- function(force = FALSE) {
 
   # ---- Check what is already installed ----
   module_check <- .verify_python_imports(
+    python_bin = venv_python,
     modules = vapply(required_packages, function(x) x$check_name, character(1))
   )
 
@@ -801,7 +893,7 @@ setup_python_deps <- function(force = FALSE) {
 
   # ---- Verify all packages can be imported ----
   message("Verifying installation...")
-  verification <- .verify_python_imports()
+  verification <- .verify_python_imports(python_bin = venv_python)
 
   for (pkg_name in names(verification$details)) {
     pkg_result <- verification$details[[pkg_name]]
