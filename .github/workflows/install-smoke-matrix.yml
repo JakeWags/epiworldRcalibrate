@@ -1,0 +1,131 @@
+name: Install smoke matrix
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+env:
+  GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  install-smoke:
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} (R-${{ matrix.r }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        r: [release]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.r }}
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: |
+            any::remotes
+          needs: check
+
+      - name: Install package from path with spaces + smoke test
+        shell: Rscript {0}
+        run: |
+          old_warn <- getOption("warn")
+          options(warn = 2)
+          on.exit(options(warn = old_warn), add = TRUE)
+
+          source_root <- normalizePath(".", winslash = "/", mustWork = TRUE)
+          staged_root <- file.path(tempdir(), "ci path with spaces", "epiworldRcalibrate")
+
+          dir.create(staged_root, recursive = TRUE, showWarnings = FALSE)
+          entries <- list.files(source_root, all.files = TRUE, no.. = TRUE, full.names = TRUE)
+          copied <- file.copy(entries, staged_root, recursive = TRUE)
+          if (!all(copied)) {
+            failed <- basename(entries[!copied])
+            stop("Failed to copy files into staged path: ", paste(failed, collapse = ", "))
+          }
+
+          remotes::install_local(
+            staged_root,
+            upgrade = "never",
+            dependencies = TRUE,
+            force = TRUE,
+            build = TRUE,
+            build_opts = c("--no-build-vignettes", "--no-manual")
+          )
+
+          library(epiworldRcalibrate)
+          model_path <- system.file("models", "model4_bilstm.pt", package = "epiworldRcalibrate")
+          if (!nzchar(model_path) || !file.exists(model_path)) {
+            stop("Bundled model file was not found after install")
+          }
+
+          # Ensure package-managed Python env is actually provisioned
+          epiworldRcalibrate::setup_python_deps(force = FALSE)
+
+          info <- epiworldRcalibrate::check_python_setup()
+          required_fields <- c("python_available", "python_path", "packages")
+          if (!all(required_fields %in% names(info))) {
+            stop("check_python_setup() output is missing expected fields")
+          }
+
+          required_modules <- c("numpy", "sklearn", "joblib", "torch")
+          missing_modules <- required_modules[!vapply(
+            required_modules,
+            function(pkg) {
+              pkg_info <- info$packages[[pkg]]
+              !is.null(pkg_info) && isTRUE(pkg_info$available)
+            },
+            logical(1)
+          )]
+          if (length(missing_modules) > 0) {
+            stop(
+              "Required Python modules not available after setup: ",
+              paste(missing_modules, collapse = ", ")
+            )
+          }
+
+          init_ok <- tryCatch(
+            {
+              epiworldRcalibrate::init_bilstm_model(force_reload = TRUE)
+              TRUE
+            },
+            error = function(e) {
+              message("init_bilstm_model() failed: ", conditionMessage(e))
+              FALSE
+            }
+          )
+          if (!isTRUE(init_ok)) {
+            stop("BiLSTM initialization failed after dependency setup")
+          }
+
+          # End-to-end inference smoke check
+          set.seed(1)
+          daily_cases <- as.numeric(round(runif(61, min = 0, max = 100)))
+          inference <- epiworldRcalibrate::estimate_sir_parameters(
+            daily_cases = daily_cases,
+            population_size = 100000,
+            recovery_rate = 0.2
+          )
+
+          expected_names <- c("ptran", "crate", "R0")
+          if (!is.numeric(inference) || !identical(names(inference), expected_names)) {
+            stop("estimate_sir_parameters() did not return expected named numeric output")
+          }
+          if (any(!is.finite(inference))) {
+            stop("estimate_sir_parameters() returned non-finite values")
+          }
+
+          cat("Installed successfully from:", normalizePath(staged_root, winslash = "/"), "\n")
+          cat("Model file path:", normalizePath(model_path, winslash = "/"), "\n")
+          cat("python_available:", info$python_available, "\n")
+          cat("python_path:", info$python_path, "\n")
+          cat("bilstm_initialized:", init_ok, "\n")
+          cat("inference_output:", paste(sprintf("%s=%.6f", names(inference), inference), collapse = ", "), "\n")

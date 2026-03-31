@@ -12,64 +12,63 @@
 .bilstm_env$model_dir    <- NULL
 .bilstm_env$venv_name    <- "epiworldRcalibrate"
 
-# =============================================================================
-# Python bootstrap (private)
-# =============================================================================
-
-#' Find available Python installation
 #' @keywords internal
-.find_python <- function() {
-  user_py <- Sys.getenv("RETICULATE_PYTHON", unset = "")
-  if (nzchar(user_py) && file.exists(user_py)) return(user_py)
+.has_reticulate_conda <- function() {
+  tryCatch({
+    nzchar(reticulate::conda_binary("auto"))
+  }, error = function(e) FALSE)
+}
 
-  if (.Platform$OS.type == "windows") {
-    candidates <- c(
-      Sys.which("python"), Sys.which("python3"),
-      "python.exe", "python3.exe",
-                    file.path(Sys.getenv("LOCALAPPDATA"),
-                              "Programs/Python/*/python.exe"))
-  } else {
-    candidates <- c(
-      Sys.which("python3"), Sys.which("python"),
-      "/usr/bin/python3", "/usr/local/bin/python3",
-      "/usr/bin/python", "/usr/local/bin/python",
-      "/opt/homebrew/bin/python3",
-      paste0(Sys.getenv("HOME"), "/.pyenv/shims/python3")
-    )
+#' @keywords internal
+.get_conda_env_names <- function() {
+  envs <- tryCatch(reticulate::conda_list(conda = "auto"),
+                   error = function(e) NULL)
+
+  if (is.null(envs) || !is.data.frame(envs) || !"name" %in% names(envs)) {
+    return(character())
   }
 
-  for (py in candidates) {
-    if (!nzchar(py)) next
-    if (file.exists(py)) return(py)
-    if (grepl("\\*", py)) {
-      matches <- Sys.glob(py)
-      if (length(matches) > 0) return(matches[1])
+  unique(as.character(envs$name))
+}
+
+#' @keywords internal
+.ensure_reticulate_conda <- function() {
+  if (!.has_reticulate_conda()) {
+    message("Installing Miniconda via reticulate...")
+    reticulate::install_miniconda(force = FALSE, update = FALSE)
+  }
+  invisible(TRUE)
+}
+
+#' @keywords internal
+.activate_package_conda_env <- function(required = FALSE) {
+  envname <- .bilstm_env$venv_name
+  envs <- .get_conda_env_names()
+
+  if (!(envname %in% envs)) {
+    if (required) {
+      stop(
+        "Python environment '", envname, "' is not set up.\n",
+        "Run epiworldRcalibrate::setup_python_deps() first.",
+        call. = FALSE
+      )
     }
+    return(FALSE)
   }
 
-  py_config <- tryCatch(reticulate::py_config(), error = function(e) NULL)
-  if (!is.null(py_config) && !is.null(py_config$python)) {
-    cfg_py <- py_config$python
-    cfg_norm <- tryCatch(normalizePath(cfg_py, winslash = "/", mustWork = TRUE),
-                         error = function(e) cfg_py)
-    # Avoid reticulate uv cache python for creating virtualenvs.
-    if (!grepl("/\\.cache/R/reticulate/uv/", cfg_norm)) {
-      return(cfg_py)
+  tryCatch({
+    reticulate::use_condaenv(envname, required = required)
+    TRUE
+  }, error = function(e) {
+    if (required) {
+      stop(
+        "Could not activate Python environment '", envname, "': ",
+        conditionMessage(e),
+        call. = FALSE
+      )
     }
-  }
-
-  py_path <- tryCatch({
-    if (.Platform$OS.type == "windows") {
-      system2("where", "python", stdout = TRUE, stderr = FALSE)[1]
-    } else {
-      system2("which", "python3", stdout = TRUE, stderr = FALSE)[1]
-    }
-  }, error = function(e) NULL)
-
-  if (!is.null(py_path) && nzchar(py_path) && file.exists(py_path))
-    return(py_path)
-
-  return(NULL)
+    FALSE
+  })
 }
 
 #' Ensure Python + necessary modules are ready (no auto-install)
@@ -81,92 +80,33 @@
 #'
 #' @keywords internal
 .ensure_python_ready <- function() {
+  envname <- .bilstm_env$venv_name
 
-  # Step 1: Initialize Python
+  # If Python is already initialized in this R session, ensure it's the
+  # package-managed environment.
   active_initialized <- tryCatch(reticulate::py_available(initialize = FALSE),
                                  error = function(e) FALSE)
-
   if (active_initialized) {
     active_py <- tryCatch(reticulate::py_config()$python,
                           error = function(e) NULL)
-    if (!is.null(active_py) && nzchar(active_py)) {
-      message("Using active Python session: ", active_py)
-    }
-
-    # Ensure the active Python is the package virtualenv if it exists
-    vname <- .bilstm_env$venv_name
-    envs <- tryCatch(reticulate::virtualenv_list(),
-                     error = function(e) character())
-    if (vname %in% envs) {
-      venv_python <- tryCatch(reticulate::virtualenv_python(vname),
-                              error = function(e) NULL)
-      if (!is.null(venv_python) && nzchar(venv_python) && file.exists(venv_python)) {
-        active_py_norm <- tryCatch(normalizePath(active_py, winslash = "/", mustWork = TRUE),
-                                   error = function(e) active_py)
-        venv_py_norm <- tryCatch(normalizePath(venv_python, winslash = "/", mustWork = TRUE),
-                                 error = function(e) venv_python)
-        if (!identical(active_py_norm, venv_py_norm)) {
-          stop(
-            "Python was already initialized with a different interpreter (", active_py_norm, ").\n",
-            "The package requires the virtual environment '", vname, "' at ", venv_py_norm, ".\n",
-            "Please restart R and run epiworldRcalibrate::setup_python_deps() first.",
-            call. = FALSE
-          )
-        }
-      }
+    if (is.null(active_py) || !nzchar(active_py) ||
+        !grepl(envname, active_py, fixed = TRUE)) {
+      stop(
+        "Python is already initialized with a different interpreter.\n",
+        "Please restart R and run epiworldRcalibrate::setup_python_deps() first.",
+        call. = FALSE
+      )
     }
   } else {
-    vname <- .bilstm_env$venv_name
-    envs <- tryCatch(reticulate::virtualenv_list(),
-                     error = function(e) character())
-
-    if (vname %in% envs) {
-      message("Using existing virtual environment: ", vname)
-      venv_python <- tryCatch(reticulate::virtualenv_python(vname),
-                              error = function(e) NULL)
-      if (!is.null(venv_python) && nzchar(venv_python) && file.exists(venv_python)) {
-        current_reticulate_python <- Sys.getenv("RETICULATE_PYTHON", unset = "")
-        if (!identical(current_reticulate_python, venv_python)) {
-          Sys.setenv(RETICULATE_PYTHON = venv_python)
-          message("Using package virtualenv Python for this session: ", venv_python)
-        }
-        reticulate::use_python(venv_python, required = FALSE)
-      } else {
-        reticulate::use_virtualenv(vname, required = FALSE)
-      }
-    } else {
-      user_py <- Sys.getenv("RETICULATE_PYTHON", unset = "")
-      if (nzchar(user_py)) {
-        message("Using user-specified Python: ", user_py)
-        if (!file.exists(user_py)) {
-          stop("RETICULATE_PYTHON points to non-existent file: ", user_py)
-        }
-        reticulate::use_python(user_py, required = TRUE)
-      } else {
-        # Do NOT create a virtualenv here — just use whatever Python is found
-        python_path <- .find_python()
-        if (is.null(python_path)) {
-          stop(
-            "Could not find a Python installation.\n",
-            "Please install Python 3.7+ and then run:\n",
-            "  epiworldRcalibrate::setup_python_deps()\n",
-            "Or set the RETICULATE_PYTHON environment variable to your ",
-            "Python path.",
-            call. = FALSE
-          )
-        }
-        reticulate::use_python(python_path, required = FALSE)
-      }
-    }
+    .activate_package_conda_env(required = TRUE)
   }
 
   # Step 2: Verify Python is available
   if (!reticulate::py_available(initialize = TRUE)) {
     stop(
       "Python could not be initialized.\n",
-      "Please check your Python installation and run:\n",
-      "  epiworldRcalibrate::setup_python_deps()\n",
-      "to set up the required environment.",
+      "Please run:\n",
+      "  epiworldRcalibrate::setup_python_deps()",
       call. = FALSE
     )
   }
@@ -363,175 +303,92 @@ def cleanup_model():
   c("numpy", "sklearn", "joblib", "torch")
 }
 
-#' Run a Python script using a target interpreter
-#' @keywords internal
-.run_python_script <- function(python_bin, code_lines, timeout_sec = 120) {
-  if (is.null(python_bin) || !nzchar(python_bin) || !file.exists(python_bin)) {
-    return(list(status = 1L,
-                stdout = character(),
-                stderr = "Python executable not found"))
-  }
-
-  script <- tempfile(fileext = ".py")
-  on.exit(unlink(script), add = TRUE)
-  writeLines(code_lines, con = script)
-
-  out <- tryCatch(
-    suppressWarnings(system2(python_bin, script,
-                             stdout = TRUE,
-                             stderr = TRUE,
-                             timeout = timeout_sec)),
-    error = function(e) structure(character(), status = 1L)
-  )
-
-  status <- attr(out, "status")
-  if (is.null(status)) status <- 0L
-
-  if (identical(status, 0L)) {
-    return(list(status = 0L, stdout = out, stderr = character()))
-  }
-
-  list(status = status,
-       stdout = character(),
-       stderr = if (length(out)) out else "Execution failed")
-}
-
-#' Compare Python versions against a minimum requirement
-#' @keywords internal
-.python_version_at_least <- function(version, minimum = "3.7") {
-  suppressWarnings(utils::compareVersion(as.character(version), minimum) >= 0)
-}
-
-#' Get Python version string from interpreter
-#' @keywords internal
-.get_python_version <- function(python_bin) {
-  res <- .run_python_script(
-    python_bin,
-    c("import sys", "print(sys.version.split()[0])"),
-    timeout_sec = 30
-  )
-
-  if (!identical(res$status, 0L) || length(res$stdout) == 0) {
-    return(NULL)
-  }
-
-  out <- res$stdout[nzchar(res$stdout)]
-  if (!length(out)) return(NULL)
-  out[length(out)]
-}
-
 #' Resolve the Python target used by package setup and diagnostics
 #' @keywords internal
 .resolve_python_target <- function() {
-  vname <- .bilstm_env$venv_name
-  envs <- tryCatch(reticulate::virtualenv_list(),
-                   error = function(e) character())
+  envname <- .bilstm_env$venv_name
 
-  if (vname %in% envs) {
-    py <- tryCatch(reticulate::virtualenv_python(vname),
-                   error = function(e) NULL)
-    if (!is.null(py) && nzchar(py) && file.exists(py)) {
-      return(list(
-        python_available = TRUE,
-        python_path = py,
-        python_version = .get_python_version(py),
-        virtualenv = vname,
-        python_source = "package_virtualenv"
-      ))
-    }
-  }
+  has_conda <- .has_reticulate_conda()
+  envs <- if (has_conda) .get_conda_env_names() else character()
+  env_exists <- envname %in% envs
+  env_activated <- FALSE
 
-  if (tryCatch(reticulate::py_available(initialize = FALSE),
-               error = function(e) FALSE)) {
-    py_config <- tryCatch(reticulate::py_config(), error = function(e) NULL)
-    if (!is.null(py_config) && !is.null(py_config$python)) {
-      py <- py_config$python
-      return(list(
-        python_available = file.exists(py),
-        python_path = py,
-        python_version = if (!is.null(py_config$version)) py_config$version else .get_python_version(py),
-        virtualenv = py_config$virtualenv,
-        python_source = "active_session"
-      ))
-    }
-  }
-
-  py <- .find_python()
-  if (!is.null(py) && nzchar(py) && file.exists(py)) {
-    return(list(
-      python_available = TRUE,
-      python_path = py,
-      python_version = .get_python_version(py),
-      virtualenv = NULL,
-      python_source = "discovered"
+  if (env_exists) {
+    env_activated <- isTRUE(tryCatch(
+      .activate_package_conda_env(required = FALSE),
+      error = function(e) FALSE
     ))
   }
 
+  py_ready <- tryCatch(
+    reticulate::py_available(initialize = isTRUE(env_activated)),
+                       error = function(e) FALSE)
+  py_cfg <- if (py_ready) {
+    tryCatch(reticulate::py_config(), error = function(e) NULL)
+  } else {
+    NULL
+  }
+
+  python_path <- if (!is.null(py_cfg) && !is.null(py_cfg$python)) {
+    py_cfg$python
+  } else {
+    NULL
+  }
+
+  python_version <- if (!is.null(py_cfg) && !is.null(py_cfg$version)) {
+    as.character(py_cfg$version)
+  } else {
+    NULL
+  }
+
+  python_source <- NULL
+  if (isTRUE(py_ready)) {
+    if (!is.null(python_path) && grepl(envname, python_path, fixed = TRUE)) {
+      python_source <- "package_conda_env"
+    } else {
+      python_source <- "active_session"
+    }
+  }
+
   list(
-    python_available = FALSE,
-    python_path = NULL,
-    python_version = NULL,
+    python_available = isTRUE(py_ready),
+    python_path = python_path,
+    python_version = python_version,
     virtualenv = NULL,
-    python_source = NULL
+    conda_env = if (env_exists) envname else NULL,
+    python_source = python_source
   )
 }
 
-#' Build Python candidates for creating package virtualenv
+#' Check package conda environment health
 #' @keywords internal
-.get_python_setup_candidates <- function() {
-  resolved <- .resolve_python_target()
-  unique(c(
-    Sys.getenv("RETICULATE_PYTHON", unset = ""),
-    resolved$python_path,
-    .find_python(),
-    Sys.which("python3"),
-    Sys.which("python")
-  ))
-}
-
-#' Check package virtual environment health
-#' @keywords internal
-.check_virtualenv_health <- function(vname) {
-  python_bin <- tryCatch(reticulate::virtualenv_python(vname),
-                         error = function(e) NULL)
-  if (is.null(python_bin) || !file.exists(python_bin)) {
-    return(list(ok = FALSE,
-                message = "Virtualenv Python executable not found."))
+.check_conda_env_health <- function(envname) {
+  if (!.has_reticulate_conda()) {
+    return(list(ok = FALSE, message = "reticulate conda is not available."))
   }
 
-  prefix_check <- .run_python_script(
-    python_bin,
-    c("import sys", "print(sys.prefix)"),
-    timeout_sec = 30
-  )
-  if (!identical(prefix_check$status, 0L)) {
-    return(list(ok = FALSE,
-                message = "Could not run Python in the virtual environment."))
+  if (!(envname %in% .get_conda_env_names())) {
+    return(list(ok = FALSE, message = "Conda environment does not exist."))
   }
 
-  pip_out <- tryCatch(
-    suppressWarnings(system2(python_bin,
-                             c("-m", "pip", "--version"),
-                             stdout = TRUE,
-                             stderr = TRUE,
-                             timeout = 30)),
-    error = function(e) structure(character(), status = 1L)
-  )
-  pip_status <- attr(pip_out, "status")
-  if (is.null(pip_status)) pip_status <- 0L
-  if (!identical(pip_status, 0L)) {
+  ok <- tryCatch({
+    reticulate::use_condaenv(envname, required = TRUE)
+    reticulate::py_available(initialize = TRUE)
+  }, error = function(e) FALSE)
+
+  if (!isTRUE(ok)) {
     return(list(ok = FALSE,
-                message = "pip is not working in the virtual environment."))
+                message = "Could not initialize Python from conda environment."))
   }
 
-  list(ok = TRUE, message = "Virtual environment is healthy.")
+  list(ok = TRUE, message = "Conda environment is healthy.")
 }
 
 #' Install Python packages with retry logic
 #' @keywords internal
 .install_python_packages <- function(packages,
                                      envname,
-                                     method = "virtualenv",
+                                     method = "conda",
                                      pip_options = NULL,
                                      retries = 2) {
   attempt <- 1L
@@ -566,54 +423,7 @@ def cleanup_model():
 
 #' Verify module imports using reticulate's active Python
 #' @keywords internal
-.verify_python_imports <- function(python_bin = NULL,
-                                   modules = .required_python_modules()) {
-  if (!is.null(python_bin) && nzchar(python_bin) && file.exists(python_bin)) {
-    details <- setNames(vector("list", length(modules)), modules)
-    failed <- character()
-
-    for (mod in modules) {
-      code_lines <- c(
-        "import importlib",
-        sprintf("module_name = %s", shQuote(mod, type = "sh")),
-        "try:",
-        "    m = importlib.import_module(module_name)",
-        "    v = getattr(m, '__version__', 'unknown')",
-        "    print('OK||' + str(v))",
-        "except Exception as e:",
-        "    print('ERROR||' + str(e))"
-      )
-
-      res <- .run_python_script(python_bin, code_lines, timeout_sec = 60)
-
-      if (!identical(res$status, 0L) || length(res$stdout) == 0) {
-        failed <- c(failed, mod)
-        err <- if (length(res$stderr)) paste(res$stderr, collapse = "\n") else "Execution failed"
-        details[[mod]] <- list(status = "error", error = err)
-        next
-      }
-
-      payload <- res$stdout[length(res$stdout)]
-
-      if (!startsWith(payload, "OK||")) {
-        failed <- c(failed, mod)
-        err <- if (startsWith(payload, "ERROR||")) {
-          sub("^ERROR\\|\\|", "", payload)
-        } else {
-          "Import failed"
-        }
-        details[[mod]] <- list(status = "error", error = err)
-      } else {
-        details[[mod]] <- list(
-          status = "ok",
-          version = sub("^OK\\|\\|", "", payload)
-        )
-      }
-    }
-
-    return(list(ok = length(failed) == 0, failed = failed, details = details))
-  }
-
+.verify_python_imports <- function(modules = .required_python_modules()) {
   if (!tryCatch(reticulate::py_available(initialize = TRUE),
                 error = function(e) FALSE)) {
     return(list(ok = FALSE,
@@ -622,29 +432,6 @@ def cleanup_model():
                   list(status = "error",
                        error = "Python could not be initialized in reticulate")
                 }), modules)))
-  }
-
-  active_python <- tryCatch(reticulate::py_config()$python,
-                            error = function(e) NULL)
-  if (!is.null(python_bin) && nzchar(python_bin) && file.exists(python_bin)) {
-    norm_target <- tryCatch(normalizePath(python_bin, winslash = "/",
-                                          mustWork = TRUE),
-                            error = function(e) python_bin)
-    norm_active <- tryCatch(normalizePath(active_python, winslash = "/",
-                                          mustWork = TRUE),
-                            error = function(e) active_python)
-    if (!is.null(norm_active) && !identical(norm_target, norm_active)) {
-      msg <- paste0(
-        "Reticulate is using a different Python (", norm_active,
-        ") than requested (", norm_target,
-        "). Restart R and set RETICULATE_PYTHON before loading the package."
-      )
-      return(list(ok = FALSE,
-                  failed = modules,
-                  details = setNames(lapply(modules, function(x) {
-                    list(status = "error", error = msg)
-                  }), modules)))
-    }
   }
 
   failed <- character()
@@ -681,7 +468,8 @@ def cleanup_model():
 
 #' Set up Python dependencies for epiworldRcalibrate
 #'
-#' This function creates a dedicated virtual environment and installs all
+#' This function creates a dedicated conda environment (managed by
+#' \'reticulate\') and installs all
 #' required Python packages (numpy, scikit-learn, joblib, PyTorch). Run this
 #' once after installing the package. This is kept separate from model
 #' functions so that package installation never happens automatically during
@@ -695,11 +483,10 @@ def cleanup_model():
 #' @details
 #' The function performs the following steps:
 #' \enumerate{
-#'   \item Finds a suitable Python installation (or uses
-#'     \code{RETICULATE_PYTHON} if set).
-#'   \item Creates a virtual environment named \code{"epiworldRcalibrate"}.
+#'   \item Ensures reticulate-managed Miniconda is available.
+#'   \item Creates a conda environment named \code{"epiworldRcalibrate"}.
 #'   \item Installs \code{numpy}, \code{scikit-learn}, \code{joblib}, and
-#'     \code{torch} (CPU version) into the virtual environment.
+#'     \code{torch} (CPU version) into that conda environment.
 #'   \item Verifies all packages can be imported.
 #' }
 #'
@@ -715,113 +502,67 @@ def cleanup_model():
 #' @export
 setup_python_deps <- function(force = FALSE) {
 
-  vname <- .bilstm_env$venv_name
+  envname <- .bilstm_env$venv_name
+
+  .ensure_reticulate_conda()
 
   # ---- Optionally remove existing environment ----
   if (force) {
-    message("Removing existing virtual environment '", vname, "'...")
-    envs <- tryCatch(reticulate::virtualenv_list(),
-                     error = function(e) character())
-    if (vname %in% envs) {
-      reticulate::virtualenv_remove(vname, confirm = FALSE)
+    message("Removing existing conda environment '", envname, "'...")
+    envs <- .get_conda_env_names()
+    if (envname %in% envs) {
+      tryCatch(
+        reticulate::conda_remove(envname = envname, conda = "auto"),
+        error = function(e) {
+          stop(
+            "Could not remove conda environment '", envname, "': ",
+            conditionMessage(e),
+            call. = FALSE
+          )
+        }
+      )
     }
     # Reset internal state
     .bilstm_env$model_loaded <- FALSE
     .bilstm_env$model_dir <- NULL
   }
 
-  # ---- Create virtual environment if needed ----
-  envs <- tryCatch(reticulate::virtualenv_list(),
-                   error = function(e) character())
-
-  if (!(vname %in% envs)) {
-    python_candidates <- .get_python_setup_candidates()
-    python_candidates <- python_candidates[nzchar(python_candidates)]
-
-    if (length(python_candidates) == 0) {
+  # ---- Create conda environment if needed ----
+  envs <- .get_conda_env_names()
+  if (!(envname %in% envs)) {
+    message("Creating conda environment '", envname, "'...")
+    tryCatch({
+      reticulate::conda_create(
+        envname = envname,
+        packages = c("python=3.11", "pip"),
+        conda = "auto"
+      )
+    }, error = function(e) {
       stop(
-        "Could not find a Python installation.\n",
-        "Please install Python 3.7+ and try again,\n",
-        "or set the RETICULATE_PYTHON environment variable.",
+        "Failed to create conda environment '", envname, "': ",
+        conditionMessage(e),
         call. = FALSE
       )
-    }
-
-    create_errors <- character()
-    created <- FALSE
-    message("Creating virtual environment '", vname, "'...")
-
-    for (python_path in python_candidates) {
-      if (!file.exists(python_path)) next
-
-      py_ver <- .get_python_version(python_path)
-      if (is.null(py_ver) || !.python_version_at_least(py_ver, "3.7")) {
-        create_errors <- c(
-          create_errors,
-          paste0("- ", python_path,
-                 ": unsupported Python version (",
-                 if (is.null(py_ver)) "unknown" else py_ver,
-                 "), require >= 3.7")
-        )
-        next
-      }
-
-      message("Trying Python at: ", python_path)
-
-      ok <- tryCatch({
-        reticulate::virtualenv_create(vname, python = python_path)
-        TRUE
-      }, error = function(e) {
-        create_errors <<- c(
-          create_errors,
-          paste0("- ", python_path, ": ", conditionMessage(e))
-        )
-        FALSE
-      })
-
-      if (ok) {
-        created <- TRUE
-        break
-      }
-    }
-
-    if (!created) {
-      stop(
-        "Failed to create virtual environment '", vname, "'.\n",
-        "Tried the following Python installations:\n",
-        paste(create_errors, collapse = "\n"),
-        call. = FALSE
-      )
-    }
+    })
   } else {
-    message("Virtual environment '", vname, "' already exists.")
+    message("Conda environment '", envname, "' already exists.")
   }
 
-  health <- .check_virtualenv_health(vname)
+  health <- .check_conda_env_health(envname)
   if (!health$ok) {
     stop(
-      "Virtual environment '", vname, "' is not healthy: ", health$message,
+      "Conda environment '", envname, "' is not healthy: ", health$message,
       "\nTry: setup_python_deps(force = TRUE)",
       call. = FALSE
     )
   }
 
-  venv_python <- tryCatch(reticulate::virtualenv_python(vname),
-                          error = function(e) NULL)
-  if (!is.null(venv_python) && nzchar(venv_python) && file.exists(venv_python)) {
-    current_reticulate_python <- Sys.getenv("RETICULATE_PYTHON", unset = "")
-    if (!identical(current_reticulate_python, venv_python)) {
-      Sys.setenv(RETICULATE_PYTHON = venv_python)
-      message("Using package virtualenv Python for this session: ", venv_python)
-    }
-  }
-
-  # Bind reticulate to the package virtualenv for this session
+  # Bind reticulate to the package conda env for this session
   tryCatch({
-    reticulate::use_virtualenv(vname, required = TRUE)
+    reticulate::use_condaenv(envname, required = TRUE)
   }, error = function(e) {
     stop(
-      "Could not activate virtual environment '", vname, "': ",
+      "Could not activate conda environment '", envname, "': ",
       conditionMessage(e), "\n",
       "If Python was already initialized with another interpreter, restart R and run setup_python_deps() again.",
       call. = FALSE
@@ -838,7 +579,6 @@ setup_python_deps <- function(force = FALSE) {
 
   # ---- Check what is already installed ----
   module_check <- .verify_python_imports(
-    python_bin = venv_python,
     modules = vapply(required_packages, function(x) x$check_name, character(1))
   )
 
@@ -862,8 +602,8 @@ setup_python_deps <- function(force = FALSE) {
       message("Installing: ", paste(non_torch, collapse = ", "), " ...")
       tryCatch({
         .install_python_packages(non_torch,
-                                 envname = vname,
-                                 method = "virtualenv",
+                                 envname = envname,
+                                 method = "conda",
                                  retries = 2)
       }, error = function(e) {
         stop("Failed to install packages ",
@@ -878,8 +618,8 @@ setup_python_deps <- function(force = FALSE) {
       tryCatch({
         .install_python_packages(
           "torch",
-          envname = vname,
-          method = "virtualenv",
+          envname = envname,
+          method = "conda",
           pip_options = c("--index-url",
                           "https://download.pytorch.org/whl/cpu"),
           retries = 2
@@ -893,7 +633,7 @@ setup_python_deps <- function(force = FALSE) {
 
   # ---- Verify all packages can be imported ----
   message("Verifying installation...")
-  verification <- .verify_python_imports(python_bin = venv_python)
+  verification <- .verify_python_imports()
 
   for (pkg_name in names(verification$details)) {
     pkg_result <- verification$details[[pkg_name]]
@@ -1051,10 +791,11 @@ check_model_status <- function() {
 
 #' Check Python and package installation status
 #'
-#' Reports whether Python is available, which virtual environment is in use,
+#' Reports whether Python is available, which package-managed conda
+#' environment is in use,
 #' and whether each required Python package is importable.
 #'
-#' @return A list with Python installation details and package status.
+#' @return A list with Python runtime details and package status.
 #' @export
 check_python_setup <- function() {
   resolved <- .resolve_python_target()
@@ -1068,7 +809,7 @@ check_python_setup <- function() {
 
   # Check packages in selected python
   packages <- .required_python_modules()
-  verification <- .verify_python_imports(result$python_path, packages)
+  verification <- .verify_python_imports(modules = packages)
   for (pkg in names(verification$details)) {
     pkg_result <- verification$details[[pkg]]
     result$packages[[pkg]] <- list(
@@ -1118,12 +859,11 @@ cleanup_model <- function() {
 #' @keywords internal
 .onAttach <- function(libname, pkgname) {
 
-  # Check if the virtual environment exists
-  vname <- .bilstm_env$venv_name
-  envs  <- tryCatch(reticulate::virtualenv_list(),
-                    error = function(e) character())
+  # Check if the package conda environment exists
+  envname <- .bilstm_env$venv_name
+  envs <- if (.has_reticulate_conda()) .get_conda_env_names() else character()
 
-  if (!(vname %in% envs)) {
+  if (!(envname %in% envs)) {
     packageStartupMessage(
       "epiworldRcalibrate: Python dependencies are not set up yet.\n",
       "Run this once to install them:\n\n",
