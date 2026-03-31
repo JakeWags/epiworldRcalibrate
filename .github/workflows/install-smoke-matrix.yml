@@ -67,12 +67,65 @@ jobs:
             stop("Bundled model file was not found after install")
           }
 
+          # Ensure package-managed Python env is actually provisioned
+          epiworldRcalibrate::setup_python_deps(force = FALSE)
+
           info <- epiworldRcalibrate::check_python_setup()
           required_fields <- c("python_available", "python_path", "packages")
           if (!all(required_fields %in% names(info))) {
             stop("check_python_setup() output is missing expected fields")
           }
 
+          required_modules <- c("numpy", "sklearn", "joblib", "torch")
+          missing_modules <- required_modules[!vapply(
+            required_modules,
+            function(pkg) {
+              pkg_info <- info$packages[[pkg]]
+              !is.null(pkg_info) && isTRUE(pkg_info$available)
+            },
+            logical(1)
+          )]
+          if (length(missing_modules) > 0) {
+            stop(
+              "Required Python modules not available after setup: ",
+              paste(missing_modules, collapse = ", ")
+            )
+          }
+
+          init_ok <- tryCatch(
+            {
+              epiworldRcalibrate::init_bilstm_model(force_reload = TRUE)
+              TRUE
+            },
+            error = function(e) {
+              message("init_bilstm_model() failed: ", conditionMessage(e))
+              FALSE
+            }
+          )
+          if (!isTRUE(init_ok)) {
+            stop("BiLSTM initialization failed after dependency setup")
+          }
+
+          # End-to-end inference smoke check
+          set.seed(1)
+          daily_cases <- as.numeric(round(runif(61, min = 0, max = 100)))
+          inference <- epiworldRcalibrate::estimate_sir_parameters(
+            daily_cases = daily_cases,
+            population_size = 100000,
+            recovery_rate = 0.2
+          )
+
+          expected_names <- c("ptran", "crate", "R0")
+          if (!is.numeric(inference) || !identical(names(inference), expected_names)) {
+            stop("estimate_sir_parameters() did not return expected named numeric output")
+          }
+          if (any(!is.finite(inference))) {
+            stop("estimate_sir_parameters() returned non-finite values")
+          }
+
           cat("Installed successfully from:", normalizePath(staged_root, winslash = "/"), "\n")
           cat("Model file path:", normalizePath(model_path, winslash = "/"), "\n")
           cat("python_available:", info$python_available, "\n")
+          cat("python_path:", info$python_path, "\n")
+          cat("bilstm_initialized:", init_ok, "\n")
+          cat("inference_output:", paste(sprintf("%s=%.6f", names(inference), inference), collapse = ", "), "\n")
