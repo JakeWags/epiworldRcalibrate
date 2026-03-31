@@ -14,7 +14,8 @@ environment from scratch. Default is \code{FALSE}.}
 Invisibly returns \code{TRUE} on success.
 }
 \description{
-This function creates a dedicated virtual environment and installs all
+This function creates a dedicated conda environment (managed by
+\'reticulate\') and installs all
 required Python packages (numpy, scikit-learn, joblib, PyTorch). Run this
 once after installing the package. This is kept separate from model
 functions so that package installation never happens automatically during
@@ -23,11 +24,10 @@ normal use.
 \details{
 The function performs the following steps:
 \enumerate{
-\item Finds a suitable Python installation (or uses
-\code{RETICULATE_PYTHON} if set).
-\item Creates a virtual environment named \code{"epiworldRcalibrate"}.
+\item Ensures reticulate-managed Miniconda is available.
+\item Creates a conda environment named \code{"epiworldRcalibrate"}.
 \item Installs \code{numpy}, \code{scikit-learn}, \code{joblib}, and
-\code{torch} (CPU version) into the virtual environment.
+\code{torch} (CPU version) into that conda environment.
 \item Verifies all packages can be imported.
 }
 }
