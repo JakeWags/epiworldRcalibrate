@@ -7,9 +7,10 @@
 check_python_setup()
 }
 \value{
-A list with Python installation details and package status.
+A list with Python runtime details and package status.
 }
 \description{
-Reports whether Python is available, which virtual environment is in use,
+Reports whether Python is available, which package-managed conda
+environment is in use,
 and whether each required Python package is importable.
 }
